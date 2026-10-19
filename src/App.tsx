@@ -7,6 +7,7 @@ import {
 } from "react-router"
 
 import { AppShell } from "@/components/app-shell"
+import { LoadError } from "@/components/load-error"
 import { Spinner } from "@/components/ui/spinner"
 import { queries } from "@/lib/api"
 import { CampaignPage } from "@/pages/campaign"
@@ -24,6 +25,15 @@ function AuthGate() {
     return (
       <div className="grid min-h-svh place-items-center">
         <Spinner className="text-muted-foreground" />
+      </div>
+    )
+  }
+  // A failed check must not fall through to setup or sign-in: an outage isn't "unclaimed".
+  const failed = [setup, me].find((query) => query.isError)
+  if (failed) {
+    return (
+      <div className="mx-auto w-full max-w-sm px-5 pt-[14vh]">
+        <LoadError query={failed} />
       </div>
     )
   }

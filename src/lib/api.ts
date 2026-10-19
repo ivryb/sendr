@@ -68,9 +68,11 @@ export type ContactsPage = {
 }
 
 export const queries = {
+  // The app can't render anything until these two answer, so they ride out network blips.
   setup: queryOptions({
     queryKey: ["setup"],
     queryFn: () => api<{ claimed: boolean }>("/api/setup"),
+    retry: 2,
   }),
   me: queryOptions({
     queryKey: ["me"],
@@ -82,6 +84,7 @@ export const queries = {
         throw error
       }
     },
+    retry: 2,
   }),
   settings: queryOptions({
     queryKey: ["settings"],
