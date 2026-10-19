@@ -1,0 +1,5 @@
+# Choose any phrase. You enter it once on first visit to claim this instance.
+SETUP_CODE=
+# Amazon SES credentials for an IAM user limited to ses:SendEmail.
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=

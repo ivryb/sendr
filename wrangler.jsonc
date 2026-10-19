@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sendr",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/u/*", "/hooks/*"]
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "sendr", "migrations_dir": "migrations" }
+  ],
+  "queues": {
+    "producers": [{ "binding": "SEND_QUEUE", "queue": "sendr-send" }],
+    "consumers": [
+      {
+        "queue": "sendr-send",
+        "max_batch_size": 1,
+        "max_concurrency": 1,
+        "max_retries": 10
+      }
+    ]
+  },
+  // Cloudflare Email Sending, used for login codes when AUTH_EMAIL_PROVIDER is "cloudflare".
+  "send_email": [{ "name": "EMAIL" }],
+  "vars": {
+    "AWS_REGION": "us-east-1",
+    "SES_CONFIGURATION_SET": "sendr",
+    "SES_MAX_SENDS_PER_SECOND": "10",
+    "EMAIL_PROVIDER": "ses",
+    "AUTH_EMAIL_PROVIDER": "ses"
+  },
+  "observability": { "enabled": true }
+}
