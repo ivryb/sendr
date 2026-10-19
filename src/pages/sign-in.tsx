@@ -37,7 +37,7 @@ export function SignInPage() {
   return (
     <AuthLayout
       title="Sign in"
-      description="Welcome back. Use the passkey on this device, or get a sign-in code by email."
+      description="Use a passkey, or get a sign-in code by email."
     >
       {step.name === "choose" ? (
         <ChooseStep

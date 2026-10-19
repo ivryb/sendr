@@ -1,3 +1,4 @@
+import { resolve } from "node:path"
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin"
 import { defineConfig } from "vitest/config"
 
@@ -15,6 +16,7 @@ export default defineConfig(async () => ({
       },
     }),
   ],
+  resolve: { alias: { "@": resolve(import.meta.dirname, "./src") } },
   test: {
     include: ["test/**/*.test.ts"],
     setupFiles: ["./test/setup.ts"],

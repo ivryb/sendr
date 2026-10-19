@@ -13,7 +13,9 @@ export function timingSafeEqual(a: string, b: string) {
   const left = encoder.encode(a)
   const right = encoder.encode(b)
   if (left.byteLength !== right.byteLength) return false
-  return crypto.subtle.timingSafeEqual(left, right)
+  let difference = 0
+  for (let i = 0; i < left.byteLength; i++) difference |= left[i] ^ right[i]
+  return difference === 0
 }
 
 /** Signs `${purpose}:${id}` so link tokens for one purpose can't be replayed for another. */

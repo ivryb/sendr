@@ -1,3 +1,4 @@
+import type { Passkey } from "@better-auth/passkey"
 import { queryOptions } from "@tanstack/react-query"
 
 import type {
@@ -7,6 +8,7 @@ import type {
   ContactStatus,
   Settings,
 } from "../../shared/model"
+import { appFetch } from "@/lib/ssr"
 
 type Issue = { path: PropertyKey[]; message: string }
 
@@ -30,19 +32,20 @@ export async function api<T>(
   path: string,
   init: { method?: string; body?: unknown } = {}
 ): Promise<T> {
-  const response = await fetch(path, {
+  const response = await appFetch(path, {
     method: init.method ?? (init.body === undefined ? "GET" : "POST"),
     headers:
       init.body === undefined ? {} : { "content-type": "application/json" },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
     credentials: "same-origin",
   })
-  const data = await response.json().catch(() => ({}))
+  const data: unknown = await response.json().catch(() => ({}))
   if (response.ok) return data as T
+  const { message, issues } = data as { message?: string; issues?: Issue[] }
   throw new ApiError(
     response.status,
-    data.message ?? fallbackMessage(response.status),
-    data.issues
+    message ?? fallbackMessage(response.status),
+    issues
   )
 }
 
@@ -53,6 +56,12 @@ function fallbackMessage(status: number) {
 }
 
 export type User = { id: string; email: string; name: string }
+
+export const CONTACTS_PAGE_SIZE = 50
+
+export type PasskeySummary = Pick<Passkey, "id" | "name"> & {
+  createdAt: string
+}
 
 export type ContactsQuery = {
   q?: string
@@ -108,6 +117,11 @@ export const queries = {
         return api<ContactsPage>(`/api/admin/contacts?${params}`)
       },
     }),
+  passkeys: queryOptions({
+    queryKey: ["passkeys"],
+    queryFn: () =>
+      api<PasskeySummary[]>("/api/auth/passkey/list-user-passkeys"),
+  }),
   campaigns: queryOptions({
     queryKey: ["campaigns"],
     queryFn: async () =>

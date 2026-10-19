@@ -8,6 +8,7 @@ import { getSettings } from "./lib/settings"
 import { adminApi } from "./routes/admin"
 import { hooks } from "./routes/hooks"
 import { publicApi } from "./routes/publicApi"
+import { serverRender } from "./ssr"
 import { unsubscribe } from "./routes/unsubscribe"
 
 const CAMPAIGN_ERROR_STATUS = { not_found: 404, invalid_action: 409, not_ready: 400 } as const
@@ -32,6 +33,14 @@ const app = new Hono<{ Bindings: Env }>()
     console.error(error)
     return c.json({ error: "internal_error" }, 500)
   })
+
+// Page navigations are admin pages, rendered on the server. Other requests (scripts, and
+// in development Vite's modules) go to the static files.
+app.get("*", (c) => {
+  if (c.req.path.startsWith("/api/")) return c.json({ error: "not_found" }, 404)
+  if (!c.req.header("accept")?.includes("text/html")) return c.env.ASSETS.fetch(c.req.raw)
+  return serverRender(c.req.raw, app)
+})
 
 export default {
   fetch: app.fetch,

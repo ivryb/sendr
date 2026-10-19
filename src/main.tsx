@@ -1,54 +1,27 @@
 import { StrictMode } from "react"
-import { createRoot } from "react-dom/client"
-import {
-  MutationCache,
-  QueryCache,
-  QueryClient,
-  QueryClientProvider,
-} from "@tanstack/react-query"
-import { toast } from "sonner"
+import { hydrateRoot } from "react-dom/client"
+import { hydrate, type DehydratedState } from "@tanstack/react-query"
+import { createBrowserRouter, RouterProvider } from "react-router"
 
 import "./index.css"
-import App from "./App.tsx"
-import { Toaster } from "@/components/ui/sonner"
-import { TooltipProvider } from "@/components/ui/tooltip"
-import { ApiError, queries } from "@/lib/api"
+import { AppProviders, routes } from "./App.tsx"
+import { createQueryClient } from "@/lib/query-client"
+import { rememberTimeZone } from "@/lib/ssr"
 
-declare module "@tanstack/react-query" {
-  interface Register {
-    /** `silent` mutations show their own error state instead of a toast. */
-    mutationMeta: { silent?: boolean }
-  }
+declare global {
+  /** Query data the server rendered the page with (see src/entry-server.tsx). */
+  var __SENDR_STATE__: DehydratedState | undefined
 }
 
-function signOutOnUnauthorized(error: Error) {
-  if (error instanceof ApiError && error.status === 401) {
-    queryClient.setQueryData(queries.me.queryKey, null)
-    return true
-  }
-  return false
-}
+rememberTimeZone()
+const queryClient = createQueryClient()
+hydrate(queryClient, globalThis.__SENDR_STATE__ ?? {})
 
-const queryClient = new QueryClient({
-  queryCache: new QueryCache({ onError: signOutOnUnauthorized }),
-  mutationCache: new MutationCache({
-    onError: (error, _variables, _context, mutation) => {
-      if (signOutOnUnauthorized(error) || mutation.meta?.silent) return
-      toast.error(error.message)
-    },
-  }),
-  defaultOptions: {
-    queries: { retry: false, refetchOnWindowFocus: false },
-  },
-})
-
-createRoot(document.getElementById("root")!).render(
+hydrateRoot(
+  document.getElementById("root")!,
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <App />
-        <Toaster position="bottom-center" />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <AppProviders client={queryClient}>
+      <RouterProvider router={createBrowserRouter(routes)} />
+    </AppProviders>
   </StrictMode>
 )

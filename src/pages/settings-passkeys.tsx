@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { authClient, unwrap } from "@/lib/auth-client"
 import { formatDate } from "@/lib/format"
-import { passkeysQuery, useAddPasskey } from "@/lib/passkeys"
+import { queries } from "@/lib/api"
+import { useAddPasskey } from "@/lib/passkeys"
 
 export function PasskeysSection() {
-  const passkeys = useQuery(passkeysQuery)
+  const passkeys = useQuery(queries.passkeys)
   const addPasskey = useAddPasskey()
   return (
     <SettingsSection
@@ -51,13 +52,13 @@ function PasskeyRow({
 }: {
   id: string
   name: string
-  createdAt: Date
+  createdAt: string
 }) {
   const queryClient = useQueryClient()
   const remove = useMutation({
     mutationFn: () => unwrap(authClient.passkey.deletePasskey({ id })),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: passkeysQuery.queryKey })
+      queryClient.invalidateQueries({ queryKey: queries.passkeys.queryKey })
       toast.success(`${name} passkey removed`)
     },
   })

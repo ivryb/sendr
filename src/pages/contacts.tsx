@@ -42,7 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { api, queries } from "@/lib/api"
+import { api, CONTACTS_PAGE_SIZE, queries } from "@/lib/api"
 import { formatDate, formatNumber } from "@/lib/format"
 import { useDebounced } from "@/lib/use-debounced"
 import {
@@ -50,8 +50,6 @@ import {
   type Contact,
   type ContactStatus,
 } from "../../shared/model"
-
-const PAGE_SIZE = 50
 
 const CONTACT_STATUS: Record<ContactStatus, { label: string; dot: string }> = {
   subscribed: { label: "Subscribed", dot: "bg-emerald-500" },
@@ -69,7 +67,7 @@ export function ContactsPage() {
     ...queries.contacts({
       q: q || undefined,
       status,
-      limit: PAGE_SIZE,
+      limit: CONTACTS_PAGE_SIZE,
       offset,
     }),
     placeholderData: keepPreviousData,
@@ -189,11 +187,11 @@ export function ContactsPage() {
         </Table>
       </div>
 
-      {total > PAGE_SIZE && (
+      {total > CONTACTS_PAGE_SIZE && (
         <div className="flex items-center justify-between gap-4 text-sm text-muted-foreground">
           <span className="tabular-nums">
             {formatNumber(offset + 1)} to{" "}
-            {formatNumber(Math.min(offset + PAGE_SIZE, total))} of{" "}
+            {formatNumber(Math.min(offset + CONTACTS_PAGE_SIZE, total))} of{" "}
             {formatNumber(total)}
           </span>
           <div className="flex gap-2">
@@ -201,15 +199,17 @@ export function ContactsPage() {
               variant="outline"
               size="sm"
               disabled={offset === 0}
-              onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+              onClick={() =>
+                setOffset(Math.max(0, offset - CONTACTS_PAGE_SIZE))
+              }
             >
               Previous
             </Button>
             <Button
               variant="outline"
               size="sm"
-              disabled={offset + PAGE_SIZE >= total}
-              onClick={() => setOffset(offset + PAGE_SIZE)}
+              disabled={offset + CONTACTS_PAGE_SIZE >= total}
+              onClick={() => setOffset(offset + CONTACTS_PAGE_SIZE)}
             >
               Next
             </Button>
