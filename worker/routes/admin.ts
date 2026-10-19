@@ -7,12 +7,37 @@ import { createAuth } from "../auth"
 import { contacts } from "../db/schema"
 import { createApiKey, deleteApiKey, listApiKeys } from "../domain/apiKeys"
 import {
+  approveCampaign,
+  campaignInput,
+  cancelCampaign,
+  createCampaign,
+  deleteDraft,
+  getCampaign,
+  listCampaigns,
+  startCampaign,
+  updateDraft,
+} from "../domain/campaigns"
+import {
   contactCounts,
   listContacts,
   setContactStatus,
 } from "../domain/contacts"
-import { getSettings } from "../lib/settings"
+import { sendTestEmail } from "../domain/sending"
+import { getSettings, toSettingsDto, updateSettings } from "../lib/settings"
 import { parseJson } from "./validation"
+
+const settingsInput = z
+  .object({
+    fromName: z.string().trim(),
+    fromEmail: z.union([z.email(), z.literal("")]),
+    replyTo: z.union([z.email(), z.literal("")]),
+    footer: z.string(),
+    publicUrl: z.union([
+      z.url().transform((url) => url.replace(/\/+$/, "")),
+      z.literal(""),
+    ]),
+  })
+  .partial()
 
 type AdminEnv = { Variables: { user: { id: string; email: string; name: string } } }
 
@@ -26,6 +51,12 @@ export const adminApi = new Hono<AdminEnv>()
     await next()
   })
   .get("/me", (c) => c.json({ user: c.get("user") }))
+
+  .get("/settings", async (c) => c.json(toSettingsDto(await getSettings())))
+  .put("/settings", async (c) => {
+    const input = await parseJson(c, settingsInput)
+    return c.json(toSettingsDto(await updateSettings(input)))
+  })
 
   .get("/contacts", async (c) => {
     const query = z
@@ -57,3 +88,35 @@ export const adminApi = new Hono<AdminEnv>()
     await deleteApiKey(c.req.param("id"))
     return c.json({ ok: true })
   })
+
+  .get("/campaigns", async (c) => c.json({ campaigns: await listCampaigns() }))
+  .post("/campaigns", async (c) =>
+    c.json({ campaign: await createCampaign(await parseJson(c, campaignInput)) })
+  )
+  .get("/campaigns/:id", async (c) =>
+    c.json({ campaign: await getCampaign(c.req.param("id")) })
+  )
+  .put("/campaigns/:id", async (c) =>
+    c.json({
+      campaign: await updateDraft(c.req.param("id"), await parseJson(c, campaignInput)),
+    })
+  )
+  .delete("/campaigns/:id", async (c) => {
+    await deleteDraft(c.req.param("id"))
+    return c.json({ ok: true })
+  })
+  .post("/campaigns/:id/test", async (c) => {
+    const { to } = await parseJson(c, z.object({ to: z.email().optional() }))
+    const user = c.get("user")
+    await sendTestEmail(c.req.param("id"), { email: to ?? user.email, name: user.name })
+    return c.json({ ok: true })
+  })
+  .post("/campaigns/:id/start", async (c) =>
+    c.json({ campaign: await startCampaign(c.req.param("id"), await getSettings()) })
+  )
+  .post("/campaigns/:id/approve", async (c) =>
+    c.json({ campaign: await approveCampaign(c.req.param("id")) })
+  )
+  .post("/campaigns/:id/cancel", async (c) =>
+    c.json({ campaign: await cancelCampaign(c.req.param("id")) })
+  )

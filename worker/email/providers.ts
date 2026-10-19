@@ -26,6 +26,7 @@ const PROVIDERS: Record<string, () => EmailProvider> = {
     maxSendsPerSecond: Infinity,
     async send(email) {
       memoryOutbox.push(email)
+      console.log(`[memory email] to ${email.to}: ${email.subject}`)
       return { providerMessageId: `memory-${crypto.randomUUID()}` }
     },
   }),

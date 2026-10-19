@@ -1,0 +1,234 @@
+import { env } from "cloudflare:workers"
+import { and, desc, eq, inArray, sql } from "drizzle-orm"
+import { z } from "zod"
+
+import {
+  CAMPAIGN_ACTIONS,
+  DELIVERY_STATUSES,
+  type Campaign,
+  type CampaignAction,
+  type CampaignCounts,
+  type CampaignStatus,
+} from "../../shared/model"
+import { db } from "../db/client"
+import { campaigns, deliveries } from "../db/schema"
+import type { InstanceSettings } from "../lib/settings"
+
+export const campaignInput = z.object({
+  subject: z.string().max(998).optional(),
+  markdown: z.string().optional(),
+  firstBatchSize: z.number().int().min(1).max(100_000).optional(),
+})
+
+export type SendMessage = { campaignId: string; deliveryIds: string[] }
+
+const MESSAGE_SIZE = 100
+
+export class CampaignError extends Error {
+  readonly code: "not_found" | "invalid_action" | "not_ready"
+  constructor(code: CampaignError["code"], message: string) {
+    super(message)
+    this.code = code
+  }
+}
+
+export async function createCampaign(input: z.infer<typeof campaignInput>) {
+  const [row] = await db().insert(campaigns).values(input).returning()
+  return toCampaignDto(row, emptyCounts())
+}
+
+export async function listCampaigns(): Promise<Campaign[]> {
+  const rows = await db().select().from(campaigns).orderBy(desc(campaigns.createdAt))
+  const counts = await deliveryCounts(rows.map((row) => row.id))
+  return rows.map((row) => toCampaignDto(row, counts.get(row.id) ?? emptyCounts()))
+}
+
+export async function getCampaign(id: string): Promise<Campaign> {
+  const row = await findCampaign(id)
+  const counts = await deliveryCounts([id])
+  return toCampaignDto(row, counts.get(id) ?? emptyCounts())
+}
+
+export async function updateDraft(id: string, input: z.infer<typeof campaignInput>) {
+  await assertStatus(id, ["draft"])
+  await db().update(campaigns).set(input).where(eq(campaigns.id, id))
+  return getCampaign(id)
+}
+
+export async function deleteDraft(id: string) {
+  await assertStatus(id, ["draft"])
+  await db().delete(campaigns).where(eq(campaigns.id, id))
+}
+
+/**
+ * Snapshots every subscribed contact into a queued delivery, then sends the first batch.
+ * Contacts who subscribe later are not added to a running campaign.
+ */
+export async function startCampaign(id: string, settings: InstanceSettings) {
+  const campaign = await findCampaign(id)
+  assertAction(campaign.status, "start")
+  const missing = [
+    !campaign.subject.trim() && "a subject",
+    !campaign.markdown.trim() && "a message",
+    !settings.fromEmail && "a sender address in Settings",
+    !settings.publicUrl && "a public URL in Settings",
+  ].filter(Boolean)
+  if (missing.length) {
+    throw new CampaignError("not_ready", `Add ${missing.join(", ")} before sending.`)
+  }
+
+  // Idempotent: a repeated or concurrent start inserts nothing new, and only one request
+  // wins the draft -> first_batch transition below.
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO deliveries (id, campaign_id, contact_id, batch, status)
+     SELECT lower(hex(randomblob(16))), ?1, id,
+       CASE WHEN row_number() OVER (ORDER BY created_at, id) <= ?2 THEN 'first' ELSE 'rest' END,
+       'queued'
+     FROM contacts WHERE status = 'subscribed'`
+  )
+    .bind(id, campaign.firstBatchSize)
+    .run()
+  if (!(await transition(id, ["draft"], "first_batch", { startedAt: new Date() }))) {
+    throw new CampaignError("invalid_action", "This campaign was already started.")
+  }
+  await enqueueBatch(id, "first")
+  await advanceCampaign(id)
+  return getCampaign(id)
+}
+
+export async function approveCampaign(id: string) {
+  assertAction((await findCampaign(id)).status, "approve")
+  if (!(await transition(id, ["awaiting_approval"], "sending"))) {
+    throw new CampaignError("invalid_action", "This campaign is no longer waiting for approval.")
+  }
+  await enqueueBatch(id, "rest")
+  await advanceCampaign(id)
+  return getCampaign(id)
+}
+
+export async function cancelCampaign(id: string) {
+  assertAction((await findCampaign(id)).status, "cancel")
+  await transition(id, ["first_batch", "awaiting_approval", "sending"], "cancelled", {
+    finishedAt: new Date(),
+  })
+  return getCampaign(id)
+}
+
+/** Moves a campaign on once its current batch has no queued deliveries left. */
+export async function advanceCampaign(id: string) {
+  const { status } = await findCampaign(id)
+  if (status !== "first_batch" && status !== "sending") return
+  const batch = status === "first_batch" ? "first" : "rest"
+  const queued = await db()
+    .select({ batch: deliveries.batch, count: sql<number>`count(*)` })
+    .from(deliveries)
+    .where(and(eq(deliveries.campaignId, id), eq(deliveries.status, "queued")))
+    .groupBy(deliveries.batch)
+  const remaining = (name: "first" | "rest") =>
+    queued.find((row) => row.batch === name)?.count ?? 0
+  if (remaining(batch) > 0) return
+
+  if (status === "first_batch" && remaining("rest") > 0) {
+    await transition(id, ["first_batch"], "awaiting_approval")
+  } else {
+    await transition(id, [status], "sent", { finishedAt: new Date() })
+  }
+}
+
+async function enqueueBatch(campaignId: string, batch: "first" | "rest") {
+  const rows = await db()
+    .select({ id: deliveries.id })
+    .from(deliveries)
+    .where(
+      and(
+        eq(deliveries.campaignId, campaignId),
+        eq(deliveries.batch, batch),
+        eq(deliveries.status, "queued")
+      )
+    )
+  const messages: { body: SendMessage }[] = []
+  for (let i = 0; i < rows.length; i += MESSAGE_SIZE) {
+    const deliveryIds = rows.slice(i, i + MESSAGE_SIZE).map((row) => row.id)
+    messages.push({ body: { campaignId, deliveryIds } })
+  }
+  // sendBatch accepts at most 100 messages per call.
+  for (let i = 0; i < messages.length; i += 100) {
+    await env.SEND_QUEUE.sendBatch(messages.slice(i, i + 100))
+  }
+}
+
+export async function findCampaign(id: string) {
+  const row = await db().query.campaigns.findFirst({ where: eq(campaigns.id, id) })
+  if (!row) throw new CampaignError("not_found", "Campaign not found.")
+  return row
+}
+
+async function assertStatus(id: string, allowed: CampaignStatus[]) {
+  const { status } = await findCampaign(id)
+  if (!allowed.includes(status)) {
+    throw new CampaignError("invalid_action", "Only drafts can be changed.")
+  }
+}
+
+function assertAction(status: CampaignStatus, action: CampaignAction) {
+  if (!CAMPAIGN_ACTIONS[status].includes(action)) {
+    throw new CampaignError("invalid_action", `Can't ${action} a campaign that is ${status}.`)
+  }
+}
+
+/** Conditional status change, so concurrent requests can't both win the same transition. */
+async function transition(
+  id: string,
+  from: CampaignStatus[],
+  to: CampaignStatus,
+  extra: Partial<typeof campaigns.$inferInsert> = {}
+) {
+  const updated = await db()
+    .update(campaigns)
+    .set({ status: to, ...extra })
+    .where(and(eq(campaigns.id, id), inArray(campaigns.status, from)))
+    .returning({ id: campaigns.id })
+  return updated.length > 0
+}
+
+async function deliveryCounts(campaignIds: string[]) {
+  const counts = new Map<string, CampaignCounts>()
+  if (!campaignIds.length) return counts
+  const rows = await db()
+    .select({
+      campaignId: deliveries.campaignId,
+      status: deliveries.status,
+      count: sql<number>`count(*)`,
+    })
+    .from(deliveries)
+    .where(inArray(deliveries.campaignId, campaignIds))
+    .groupBy(deliveries.campaignId, deliveries.status)
+  for (const row of rows) {
+    const entry = counts.get(row.campaignId) ?? emptyCounts()
+    entry[row.status] = row.count
+    entry.total += row.count
+    counts.set(row.campaignId, entry)
+  }
+  return counts
+}
+
+function emptyCounts(): CampaignCounts {
+  return Object.assign(
+    { total: 0 },
+    Object.fromEntries(DELIVERY_STATUSES.map((status) => [status, 0]))
+  ) as CampaignCounts
+}
+
+function toCampaignDto(row: typeof campaigns.$inferSelect, counts: CampaignCounts): Campaign {
+  return {
+    id: row.id,
+    subject: row.subject,
+    markdown: row.markdown,
+    status: row.status,
+    firstBatchSize: row.firstBatchSize,
+    createdAt: row.createdAt.toISOString(),
+    startedAt: row.startedAt?.toISOString() ?? null,
+    finishedAt: row.finishedAt?.toISOString() ?? null,
+    counts,
+  }
+}
