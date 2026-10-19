@@ -1,9 +1,10 @@
-import { useDeferredValue, useMemo } from "react"
+import { useMemo, useRef } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router"
 import { cn } from "cn"
 
 import { queries } from "@/lib/api"
+import { useDebounced } from "@/lib/use-debounced"
 import { senderAddress } from "../../shared/model"
 import { renderEmail } from "../../shared/render"
 
@@ -22,18 +23,23 @@ export function EmailPreview({
 }) {
   const settings = useQuery(queries.settings).data
   const me = useQuery(queries.me).data
-  const deferred = useDeferredValue({ subject, markdown })
+  const debouncedSubject = useDebounced(subject)
+  const debouncedMarkdown = useDebounced(markdown)
   const email = useMemo(
     () =>
       renderEmail({
-        ...deferred,
+        subject: debouncedSubject,
+        markdown: debouncedMarkdown,
         footer: settings?.footer ?? "",
         recipient: { firstName: me?.name.split(" ")[0] ?? null, fields: {} },
         unsubscribeUrl: "#",
       }),
-    [deferred, settings?.footer, me?.name]
+    [debouncedSubject, debouncedMarkdown, settings?.footer, me?.name]
   )
   const from = settings?.fromEmail ? senderAddress(settings) : null
+  // A new srcDoc reloads the frame at the top; keep the reader where they were.
+  const frame = useRef<HTMLIFrameElement>(null)
+  const scrollY = useRef(0)
 
   return (
     <div
@@ -60,8 +66,17 @@ export function EmailPreview({
       </dl>
       <iframe
         title="Email preview"
-        sandbox=""
+        ref={frame}
+        sandbox="allow-same-origin"
         srcDoc={email.html}
+        onLoad={() => {
+          const view = frame.current?.contentWindow
+          if (!view) return
+          view.scrollTo(0, scrollY.current)
+          view.addEventListener("scroll", () => {
+            scrollY.current = view.scrollY
+          })
+        }}
         className="min-h-0 w-full flex-1 bg-white"
       />
     </div>

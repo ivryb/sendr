@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router"
 
+import { LoadError } from "@/components/load-error"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { queries } from "@/lib/api"
-import { CAMPAIGN_STATUS } from "@/lib/campaign"
+import { ApiError, queries } from "@/lib/api"
+import { refreshInterval } from "@/lib/campaign"
 import { CampaignDetail } from "@/pages/campaign-detail"
 import { CampaignEditor } from "@/pages/campaign-editor"
 
@@ -13,9 +14,8 @@ export function CampaignPage() {
   const campaign = useQuery({
     ...queries.campaign(id),
     refetchInterval: (query) =>
-      query.state.data
-        ? CAMPAIGN_STATUS[query.state.data.status].refresh
-        : false,
+      query.state.data ? refreshInterval(query.state.data) : false,
+    refetchOnWindowFocus: true,
   })
 
   if (campaign.isPending) {
@@ -28,6 +28,9 @@ export function CampaignPage() {
     )
   }
   if (!campaign.data) {
+    const missing =
+      campaign.error instanceof ApiError && campaign.error.status === 404
+    if (!missing) return <LoadError query={campaign} />
     return (
       <div className="flex flex-col items-start gap-4 py-16">
         <h1 className="text-xl font-semibold">This campaign isn't here</h1>

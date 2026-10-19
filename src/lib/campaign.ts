@@ -1,4 +1,5 @@
 import type {
+  Campaign,
   CampaignCounts,
   CampaignStatus,
   DeliveryStatus,
@@ -32,6 +33,11 @@ export const CAMPAIGN_STATUS: Record<CampaignStatus, StatusMeta> = {
     dot: "bg-muted-foreground/40",
     refresh: false,
   },
+}
+
+/** How often to refresh a campaign, in ms. Delivery reports keep arriving after it finishes. */
+export function refreshInterval({ status, counts }: Campaign) {
+  return CAMPAIGN_STATUS[status].refresh || (counts.sent > 0 ? 30_000 : false)
 }
 
 /** The stages a started campaign moves through, in order. */

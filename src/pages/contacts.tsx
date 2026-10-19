@@ -11,6 +11,7 @@ import { toast } from "sonner"
 import { cn } from "cn"
 
 import { CodeBlock } from "@/components/code-block"
+import { LoadError } from "@/components/load-error"
 import { PageHeader } from "@/components/page-header"
 import {
   AlertDialog,
@@ -77,6 +78,14 @@ export function ContactsPage() {
   const everyone = Object.values(counts).reduce((sum, n) => sum + (n ?? 0), 0)
 
   if (contacts.isPending) return <ContactsSkeleton />
+  if (contacts.isError) {
+    return (
+      <div className="flex flex-col gap-8">
+        <PageHeader title="Contacts" />
+        <LoadError query={contacts} />
+      </div>
+    )
+  }
   if (everyone === 0) {
     return (
       <div className="flex flex-col gap-8">

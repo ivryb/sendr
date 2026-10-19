@@ -6,6 +6,9 @@ import { defineConfig } from "vite"
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), cloudflare()],
+  build: {
+    chunkSizeWarningLimit: 800,
+  },
   resolve: {
     alias: {
       "@": resolve(import.meta.dirname, "./src"),

@@ -252,7 +252,7 @@ function Review({ campaign }: { campaign: Campaign }) {
             ? "Delivery reports usually arrive within a few minutes. If none show up, check the SES events setup in Settings."
             : tooHigh
               ? "Too many messages are bouncing or being marked as spam. Cancel this campaign and clean up your list before sending more: high rates can get your Amazon SES account paused."
-              : "This looks healthy. Below 5% bounces and 0.1% complaints, it's safe to send to everyone else."}
+              : `This looks healthy. Below ${formatPercent(RATE_LIMITS.bounced)} bounces and ${formatPercent(RATE_LIMITS.complained)} complaints, it's safe to send to everyone else.`}
         </p>
         {reported === 0 && (
           <Link
@@ -296,7 +296,7 @@ function Review({ campaign }: { campaign: Campaign }) {
                 ) : (
                   <ShieldCheckIcon className="size-3.5" />
                 )}
-                Pause above {formatPercent(RATE_LIMITS[status])}
+                Keep under {formatPercent(RATE_LIMITS[status])}
               </span>
             </div>
           )

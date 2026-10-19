@@ -10,7 +10,6 @@ import { toast } from "sonner"
 
 import "./index.css"
 import App from "./App.tsx"
-import { ThemeProvider } from "@/components/theme-provider.tsx"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { ApiError, queries } from "@/lib/api"
@@ -45,13 +44,11 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <App />
-          <Toaster position="bottom-center" />
-        </TooltipProvider>
-      </QueryClientProvider>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <App />
+        <Toaster position="bottom-center" />
+      </TooltipProvider>
+    </QueryClientProvider>
   </StrictMode>
 )

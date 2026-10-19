@@ -4,24 +4,26 @@ import { Link, useNavigate } from "react-router"
 import { cn } from "cn"
 
 import { CampaignStatusBadge } from "@/components/campaign-status"
+import { LoadError } from "@/components/load-error"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { api, contactCounts, queries } from "@/lib/api"
-import { CAMPAIGN_STATUS, deliveryStats } from "@/lib/campaign"
+import { deliveryStats, refreshInterval } from "@/lib/campaign"
 import { formatDate, formatNumber } from "@/lib/format"
 import type { Campaign } from "../../shared/model"
 
 export function CampaignsPage() {
   const campaigns = useQuery({
     ...queries.campaigns,
-    refetchInterval: (query) =>
-      query.state.data?.some(
-        (campaign) => CAMPAIGN_STATUS[campaign.status].refresh
-      )
-        ? 5000
-        : false,
+    refetchInterval: (query) => {
+      const intervals = (query.state.data ?? [])
+        .map(refreshInterval)
+        .filter((interval) => interval !== false)
+      return intervals.length ? Math.min(...intervals) : false
+    },
+    refetchOnWindowFocus: true,
   })
   const create = useCreateCampaign()
 
@@ -39,6 +41,8 @@ export function CampaignsPage() {
       />
       {campaigns.isPending ? (
         <ListSkeleton />
+      ) : campaigns.isError && !campaigns.data ? (
+        <LoadError query={campaigns} />
       ) : campaigns.data?.length ? (
         <ul className="divide-y overflow-hidden rounded-xl ring-1 ring-foreground/10">
           {campaigns.data.map((campaign) => (

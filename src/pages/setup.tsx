@@ -87,9 +87,10 @@ function ClaimStep({ onClaimed }: { onClaimed: () => void }) {
 
 function PasskeyStep() {
   const queryClient = useQueryClient()
-  const finish = () => {
+  // Load the admin first, or the sign-in page flashes before they're known.
+  const finish = async () => {
+    await queryClient.fetchQuery(queries.me)
     queryClient.setQueryData(queries.setup.queryKey, { claimed: true })
-    queryClient.invalidateQueries({ queryKey: queries.me.queryKey })
   }
   const addPasskey = useAddPasskey({ onAdded: finish })
 

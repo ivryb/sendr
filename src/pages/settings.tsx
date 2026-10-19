@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 import { CopyField } from "@/components/copy-button"
+import { LoadError } from "@/components/load-error"
 import { PageHeader } from "@/components/page-header"
 import { SettingsSection } from "@/components/settings-section"
 import { Button } from "@/components/ui/button"
@@ -96,6 +97,8 @@ export function SettingsPage() {
           <SesEventsSection settings={settings.data} />
           <PasskeysSection />
         </div>
+      ) : settings.isError ? (
+        <LoadError query={settings} />
       ) : (
         <div className="flex flex-col gap-4 pt-8">
           <Skeleton className="h-40 w-full" />

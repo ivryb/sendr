@@ -184,10 +184,10 @@ function useAutosave(campaign: Campaign) {
   const { mutate, mutateAsync } = save
 
   useEffect(() => {
-    if (!dirty) return
+    if (!dirty || save.isPending) return
     const timer = setTimeout(() => mutate(draft), 700)
     return () => clearTimeout(timer)
-  }, [draft, dirty, mutate])
+  }, [draft, dirty, save.isPending, mutate])
 
   // Leaving within the debounce window still keeps the last keystrokes.
   const pending = useRef<Draft | null>(null)
@@ -196,8 +196,14 @@ function useAutosave(campaign: Campaign) {
   }, [draft, dirty])
   useEffect(
     () => () => {
-      if (!pending.current) return
-      api(path, { method: "PUT", body: pending.current })
+      const edits = pending.current
+      if (!edits) return
+      // Reopening the editor reads the cache, so it must hold the last keystrokes too.
+      queryClient.setQueryData(
+        queries.campaign(campaign.id).queryKey,
+        (cached) => cached && { ...cached, ...edits }
+      )
+      api(path, { method: "PUT", body: edits })
         .then(() =>
           queryClient.invalidateQueries({
             queryKey: queries.campaigns.queryKey,
@@ -205,7 +211,7 @@ function useAutosave(campaign: Campaign) {
         )
         .catch(() => {})
     },
-    [path, queryClient]
+    [path, campaign.id, queryClient]
   )
 
   return {
