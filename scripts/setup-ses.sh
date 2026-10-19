@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Connects Amazon SES to a Sendr deployment. Run once per deployment with admin AWS credentials.
+# Connects Amazon SES to a Sendr deployment. Run once per deployment with admin AWS credentials;
+# it creates named resources, so a second run stops at the first one that already exists.
 #
 #   scripts/setup-ses.sh https://emails.example.com <webhook-secret> [region]
 #

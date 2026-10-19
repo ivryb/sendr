@@ -94,15 +94,19 @@ export async function contactCounts() {
   return Object.fromEntries(rows.map((row) => [row.status, row.count]))
 }
 
-/** Changes a contact's status on the operator's or the recipient's request. */
+/**
+ * Changes a contact's status on the operator's or the recipient's request. With `onlyFrom`,
+ * nothing changes unless the contact currently has that status.
+ */
 export async function setContactStatus(
-  where: SQL,
-  status: "subscribed" | "unsubscribed"
+  id: string,
+  status: "subscribed" | "unsubscribed",
+  onlyFrom?: ContactStatus
 ) {
   await db()
     .update(contacts)
     .set({ status, statusChangedAt: new Date() })
-    .where(where)
+    .where(and(eq(contacts.id, id), onlyFrom && eq(contacts.status, onlyFrom)))
 }
 
 function toContactDto(row: typeof contacts.$inferSelect): Contact {

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { html } from "hono/html"
 
@@ -32,19 +32,13 @@ export const unsubscribe = new Hono()
   .post("/:token", async (c) => {
     const found = await findRecipient(c.req.param("token"))
     if (!found) return c.html(invalidLinkPage(c.req.param("token")), 404)
-    await setContactStatus(
-      and(eq(contacts.id, found.contact.id), eq(contacts.status, "subscribed"))!,
-      "unsubscribed"
-    )
+    await setContactStatus(found.contact.id, "unsubscribed", "subscribed")
     return c.html(unsubscribedPage(found.sender, c.req.param("token")))
   })
   .post("/:token/resubscribe", async (c) => {
     const found = await findRecipient(c.req.param("token"))
     if (!found) return c.html(invalidLinkPage(c.req.param("token")), 404)
-    await setContactStatus(
-      and(eq(contacts.id, found.contact.id), eq(contacts.status, "unsubscribed"))!,
-      "subscribed"
-    )
+    await setContactStatus(found.contact.id, "subscribed", "unsubscribed")
     return c.html(page(found.sender, "You're subscribed again", html`<p>Welcome back.</p>`))
   })
 

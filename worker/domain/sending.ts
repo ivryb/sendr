@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers"
-import { and, eq, inArray } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 
 import { renderEmail } from "../../shared/render"
 import { db } from "../db/client"
@@ -13,8 +13,15 @@ import { advanceCampaign, findCampaign, type SendMessage } from "./campaigns"
 
 export const UNSUBSCRIBE_PURPOSE = "unsubscribe"
 
-/** Queue consumer: sends one message's deliveries at the provider's pace. */
-export async function processSendMessage({ campaignId, deliveryIds }: SendMessage) {
+const DELIVERIES_PER_MESSAGE = 100
+
+/**
+ * Queue consumer: sends the campaign's next queued deliveries at the provider's pace, then
+ * queues itself again until the current batch is done. The consumer runs one message at a
+ * time, so there is never more than one sender per campaign, and a redelivered message only
+ * finds deliveries that are still queued.
+ */
+export async function processSendMessage({ campaignId }: SendMessage) {
   const campaign = await findCampaign(campaignId).catch(() => null)
   if (campaign?.status !== "first_batch" && campaign?.status !== "sending") return
 
@@ -24,7 +31,14 @@ export async function processSendMessage({ campaignId, deliveryIds }: SendMessag
     .select({ delivery: deliveries, contact: contacts })
     .from(deliveries)
     .leftJoin(contacts, eq(deliveries.contactId, contacts.id))
-    .where(and(inArray(deliveries.id, deliveryIds), eq(deliveries.status, "queued")))
+    .where(
+      and(
+        eq(deliveries.campaignId, campaignId),
+        eq(deliveries.batch, campaign.status === "first_batch" ? "first" : "rest"),
+        eq(deliveries.status, "queued")
+      )
+    )
+    .limit(DELIVERIES_PER_MESSAGE)
 
   const pace = pacer(provider)
   for (const { delivery, contact } of rows) {
@@ -61,7 +75,11 @@ export async function processSendMessage({ campaignId, deliveryIds }: SendMessag
       await markDelivery(delivery.id, { status: "failed", error: error.message })
     }
   }
-  await advanceCampaign(campaignId)
+  if (rows.length === DELIVERIES_PER_MESSAGE) {
+    await env.SEND_QUEUE.send({ campaignId })
+  } else {
+    await advanceCampaign(campaignId)
+  }
 }
 
 /** Sends the campaign as it would reach one recipient, to the admin, without touching stats. */

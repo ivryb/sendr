@@ -15,9 +15,9 @@ Sendr is single-tenant: one deployment is one sender and one contact list. Deplo
 ## Deploy
 
 1. Click **Deploy to Cloudflare** above. Cloudflare copies this repo into your GitHub account, creates the D1 database and queue, and asks for three secrets:
-   - `SETUP_CODE`: any phrase you choose. You enter it once to claim the instance.
+   - `SETUP_CODE`: a long random phrase. You enter it once to claim the instance.
    - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`: an SES sending key. Put a placeholder for now; step 4 creates the real one.
-2. Add a custom domain to the Worker (Workers & Pages > sendr > Settings > Domains & Routes), for example `emails.example.com`. Unsubscribe links use it, so pick one you'll keep.
+2. Add a custom domain to the Worker (Workers & Pages > sendr > Settings > Domains & Routes), for example `emails.example.com`. Unsubscribe links use it, so pick one you'll keep. Claim the instance on this domain, not on `workers.dev`: passkeys only work on the domain they were created on.
 3. Open the domain, enter your setup code, and add a passkey. In **Settings**, fill in the sender name and address, the footer (include your postal address: anti-spam laws require it), and the public URL.
 4. Connect SES (below), then create an API key in **Settings** and push your contacts.
 

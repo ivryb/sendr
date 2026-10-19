@@ -1,4 +1,4 @@
-import { createMessageBatch, env } from "cloudflare:test"
+import { createMessageBatch } from "cloudflare:test"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { Campaign } from "../shared/model"
@@ -27,16 +27,21 @@ beforeEach(async () => {
 })
 
 async function addContacts(count: number) {
-  await request("/api/v1/contacts/batch", {
-    bearer: apiKey,
-    json: {
-      contacts: Array.from({ length: count }, (_, i) => ({
-        externalId: `u${i}`,
-        email: `reader${i}@example.com`,
-        firstName: i === 0 ? "Ann" : undefined,
-      })),
-    },
-  })
+  for (let start = 0; start < count; start += 100) {
+    await request("/api/v1/contacts/batch", {
+      bearer: apiKey,
+      json: {
+        contacts: Array.from({ length: Math.min(100, count - start) }, (_, offset) => {
+          const i = start + offset
+          return {
+            externalId: `u${i}`,
+            email: `reader${i}@example.com`,
+            firstName: i === 0 ? "Ann" : undefined,
+          }
+        }),
+      },
+    })
+  }
 }
 
 async function newCampaign(body: Record<string, unknown> = {}) {
@@ -89,6 +94,18 @@ describe("sending a campaign", () => {
     expect((await campaign(id)).counts).toMatchObject({ total: 5, sent: 5, queued: 0 })
   })
 
+  it("sends a list larger than one queue message without losing anyone", async () => {
+    await addContacts(250)
+    const { id } = await newCampaign({ firstBatchSize: 200 })
+    await act(id, "start")
+    await reachStatus(id, "awaiting_approval")
+    expect(sentEmails()).toHaveLength(200)
+
+    await act(id, "approve")
+    await reachStatus(id, "sent")
+    expect(new Set(sentEmails().map((email) => email.to)).size).toBe(250)
+  })
+
   it("a list smaller than the first batch is sent completely without approval", async () => {
     await addContacts(2)
     const { id } = await newCampaign({ firstBatchSize: 10 })
@@ -108,7 +125,7 @@ describe("sending a campaign", () => {
     expect(ann.subject).toBe("News for Ann")
     expect(ann.text).toContain("Hey Ann!")
     expect(other.text).toContain("Hey there!")
-    expect(ann.from).toBe("Evan <evan@example.com>")
+    expect(ann.from).toBe('"Evan" <evan@example.com>')
     expect(ann.html).toContain("Example Inc, 1 Main St")
     expect(ann.headers?.["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click")
     expect(ann.headers?.["List-Unsubscribe"]).toMatch(/^<https:\/\/sendr\.test\/u\/.+>$/)
@@ -183,27 +200,18 @@ describe("sending a campaign", () => {
     expect((await campaign(id)).counts.total).toBe(0)
   })
 
-  it("a redelivered queue message never sends twice", async () => {
+  it("a stray queue message after the campaign finished sends nothing", async () => {
     await addContacts(3)
     const { id } = await newCampaign()
     await act(id, "start")
     await reachStatus(id, "sent")
 
-    const { results } = await env.DB.prepare(
-      "SELECT id FROM deliveries WHERE campaign_id = ?"
-    )
-      .bind(id)
-      .all<{ id: string }>()
     const batch = createMessageBatch("sendr-send", [
-      {
-        id: "redelivery",
-        timestamp: new Date(),
-        attempts: 2,
-        body: { campaignId: id, deliveryIds: results.map((row) => row.id) },
-      },
+      { id: "redelivery", timestamp: new Date(), attempts: 2, body: { campaignId: id } },
     ])
     await worker.queue(batch)
 
     expect(sentEmails()).toHaveLength(3)
   })
+
 })

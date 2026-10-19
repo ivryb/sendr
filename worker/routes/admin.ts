@@ -1,10 +1,8 @@
-import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { z } from "zod"
 
 import { CONTACT_STATUSES } from "../../shared/model"
 import { createAuth } from "../auth"
-import { contacts } from "../db/schema"
 import { createApiKey, deleteApiKey, listApiKeys } from "../domain/apiKeys"
 import {
   approveCampaign,
@@ -75,7 +73,7 @@ export const adminApi = new Hono<AdminEnv>()
       c,
       z.object({ status: z.enum(["subscribed", "unsubscribed"]) })
     )
-    await setContactStatus(eq(contacts.id, c.req.param("id")), status)
+    await setContactStatus(c.req.param("id"), status)
     return c.json({ ok: true })
   })
 

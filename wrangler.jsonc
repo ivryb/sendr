@@ -18,7 +18,8 @@
         "queue": "sendr-send",
         "max_batch_size": 1,
         "max_concurrency": 1,
-        "max_retries": 10
+        "max_retries": 10,
+        "retry_delay": 60
       }
     ]
   },

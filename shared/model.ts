@@ -83,7 +83,8 @@ export type ApiKey = {
   lastUsedAt: string | null
 }
 
-/** "Evan <evan@example.com>" when a name is set. */
+/** `"Acme, Inc." <hi@acme.com>`: quoted, because a comma in a bare name splits the address. */
 export function senderAddress(sender: { fromName: string; fromEmail: string }) {
-  return sender.fromName ? `${sender.fromName} <${sender.fromEmail}>` : sender.fromEmail
+  if (!sender.fromName) return sender.fromEmail
+  return `"${sender.fromName.replace(/["\\]/g, "\\$&")}" <${sender.fromEmail}>`
 }

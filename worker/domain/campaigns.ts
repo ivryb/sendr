@@ -4,6 +4,7 @@ import { z } from "zod"
 
 import {
   CAMPAIGN_ACTIONS,
+  CAMPAIGN_STATUSES,
   DELIVERY_STATUSES,
   type Campaign,
   type CampaignAction,
@@ -20,9 +21,8 @@ export const campaignInput = z.object({
   firstBatchSize: z.number().int().min(1).max(100_000).optional(),
 })
 
-export type SendMessage = { campaignId: string; deliveryIds: string[] }
-
-const MESSAGE_SIZE = 100
+/** One queue message sends the campaign's next deliveries, then queues the next message. */
+export type SendMessage = { campaignId: string }
 
 export class CampaignError extends Error {
   readonly code: "not_found" | "invalid_action" | "not_ready"
@@ -39,13 +39,13 @@ export async function createCampaign(input: z.infer<typeof campaignInput>) {
 
 export async function listCampaigns(): Promise<Campaign[]> {
   const rows = await db().select().from(campaigns).orderBy(desc(campaigns.createdAt))
-  const counts = await deliveryCounts(rows.map((row) => row.id))
+  const counts = await deliveryCounts()
   return rows.map((row) => toCampaignDto(row, counts.get(row.id) ?? emptyCounts()))
 }
 
 export async function getCampaign(id: string): Promise<Campaign> {
   const row = await findCampaign(id)
-  const counts = await deliveryCounts([id])
+  const counts = await deliveryCounts(id)
   return toCampaignDto(row, counts.get(id) ?? emptyCounts())
 }
 
@@ -91,24 +91,22 @@ export async function startCampaign(id: string, settings: InstanceSettings) {
   if (!(await transition(id, ["draft"], "first_batch", { startedAt: new Date() }))) {
     throw new CampaignError("invalid_action", "This campaign was already started.")
   }
-  await enqueueBatch(id, "first")
-  await advanceCampaign(id)
+  await env.SEND_QUEUE.send({ campaignId: id })
   return getCampaign(id)
 }
 
 export async function approveCampaign(id: string) {
   assertAction((await findCampaign(id)).status, "approve")
-  if (!(await transition(id, ["awaiting_approval"], "sending"))) {
+  if (!(await transition(id, statusesAllowing("approve"), "sending"))) {
     throw new CampaignError("invalid_action", "This campaign is no longer waiting for approval.")
   }
-  await enqueueBatch(id, "rest")
-  await advanceCampaign(id)
+  await env.SEND_QUEUE.send({ campaignId: id })
   return getCampaign(id)
 }
 
 export async function cancelCampaign(id: string) {
   assertAction((await findCampaign(id)).status, "cancel")
-  await transition(id, ["first_batch", "awaiting_approval", "sending"], "cancelled", {
+  await transition(id, statusesAllowing("cancel"), "cancelled", {
     finishedAt: new Date(),
   })
   return getCampaign(id)
@@ -135,28 +133,6 @@ export async function advanceCampaign(id: string) {
   }
 }
 
-async function enqueueBatch(campaignId: string, batch: "first" | "rest") {
-  const rows = await db()
-    .select({ id: deliveries.id })
-    .from(deliveries)
-    .where(
-      and(
-        eq(deliveries.campaignId, campaignId),
-        eq(deliveries.batch, batch),
-        eq(deliveries.status, "queued")
-      )
-    )
-  const messages: { body: SendMessage }[] = []
-  for (let i = 0; i < rows.length; i += MESSAGE_SIZE) {
-    const deliveryIds = rows.slice(i, i + MESSAGE_SIZE).map((row) => row.id)
-    messages.push({ body: { campaignId, deliveryIds } })
-  }
-  // sendBatch accepts at most 100 messages per call.
-  for (let i = 0; i < messages.length; i += 100) {
-    await env.SEND_QUEUE.sendBatch(messages.slice(i, i + 100))
-  }
-}
-
 export async function findCampaign(id: string) {
   const row = await db().query.campaigns.findFirst({ where: eq(campaigns.id, id) })
   if (!row) throw new CampaignError("not_found", "Campaign not found.")
@@ -168,6 +144,10 @@ async function assertStatus(id: string, allowed: CampaignStatus[]) {
   if (!allowed.includes(status)) {
     throw new CampaignError("invalid_action", "Only drafts can be changed.")
   }
+}
+
+function statusesAllowing(action: CampaignAction) {
+  return CAMPAIGN_STATUSES.filter((status) => CAMPAIGN_ACTIONS[status].includes(action))
 }
 
 function assertAction(status: CampaignStatus, action: CampaignAction) {
@@ -191,9 +171,9 @@ async function transition(
   return updated.length > 0
 }
 
-async function deliveryCounts(campaignIds: string[]) {
+/** Counts for one campaign, or for all of them (the list never binds a growing ID list). */
+async function deliveryCounts(campaignId?: string) {
   const counts = new Map<string, CampaignCounts>()
-  if (!campaignIds.length) return counts
   const rows = await db()
     .select({
       campaignId: deliveries.campaignId,
@@ -201,7 +181,7 @@ async function deliveryCounts(campaignIds: string[]) {
       count: sql<number>`count(*)`,
     })
     .from(deliveries)
-    .where(inArray(deliveries.campaignId, campaignIds))
+    .where(campaignId ? eq(deliveries.campaignId, campaignId) : undefined)
     .groupBy(deliveries.campaignId, deliveries.status)
   for (const row of rows) {
     const entry = counts.get(row.campaignId) ?? emptyCounts()
