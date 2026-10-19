@@ -195,7 +195,7 @@ describe("sending a campaign", () => {
     await request(`/api/admin/campaigns/${id}/test`, { cookie: admin, json: {} })
 
     expect(sentEmails()).toMatchObject([
-      { to: "owner@example.com", subject: "[Test] News for Owner" },
+      { to: "owner@example.com", subject: "[Test] News for you" },
     ])
     expect((await campaign(id)).counts.total).toBe(0)
   })

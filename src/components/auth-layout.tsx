@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 
 import { Logo } from "@/components/logo"
 
-/** The centered, single-column frame for setup and sign-in. */
+/** The centered, single-column frame for sign-in. */
 export function AuthLayout({
   title,
   description,

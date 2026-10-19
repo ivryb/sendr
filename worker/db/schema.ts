@@ -116,5 +116,4 @@ export const settings = sqliteTable("settings", {
   // Signs Better Auth sessions and email link tokens.
   secret: text("secret").notNull(),
   webhookSecret: text("webhook_secret").notNull(),
-  claimedSetupCodeHash: text("claimed_setup_code_hash"),
 })

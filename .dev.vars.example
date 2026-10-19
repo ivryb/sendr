@@ -1,5 +1,5 @@
-# Choose any phrase. You enter it once on first visit to claim this instance.
-SETUP_CODE=
+# Your email. Sign in with it on first visit to become this instance's admin.
+ADMIN_EMAIL=
 # Amazon SES credentials for an IAM user limited to ses:SendEmail.
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=

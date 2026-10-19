@@ -3,7 +3,10 @@ import { exports } from "cloudflare:workers"
 import { memoryOutbox } from "../worker/email/providers"
 
 export const ORIGIN = "https://sendr.test"
-export const SETUP_CODE = "test-setup-code"
+export const ADMIN_EMAIL = "owner@example.com"
+
+/** Codes the instance handed to sendr.soy; test/setup.ts intercepts those requests. */
+export const relayedCodes: { email: string; code: string }[] = []
 
 export function request(
   path: string,
@@ -25,23 +28,30 @@ export function request(
   )
 }
 
-export function claim(
-  body: Partial<{ setupCode: string; email: string; name: string }> = {}
-) {
-  return request("/api/auth/setup/claim", {
-    json: {
-      setupCode: SETUP_CODE,
-      email: "owner@example.com",
-      name: "Owner",
-      ...body,
-    },
+export function requestLoginCode(email: string) {
+  return request("/api/auth/email-otp/send-verification-otp", {
+    json: { email, type: "sign-in" },
   })
 }
 
-/** Claims the instance and returns the admin's session cookie. */
+export function signInWithCode(email: string, otp: string) {
+  return request("/api/auth/sign-in/email-otp", { json: { email, otp } })
+}
+
+/** The most recent login code, whether the instance sent it or sendr.soy did. */
+export function lastLoginCode(email: string) {
+  const sent = sentEmails()
+    .filter((message) => message.to === email)
+    .map((message) => message.text.match(/\d{6}/)?.[0])
+  const relayed = relayedCodes.filter((entry) => entry.email === email).map((entry) => entry.code)
+  return [...sent, ...relayed].at(-1)
+}
+
+/** Signs in as ADMIN_EMAIL (creating the admin on a fresh instance) and returns the session cookie. */
 export async function signInAsAdmin() {
-  const response = await claim()
-  if (!response.ok) throw new Error(`claim failed: ${await response.text()}`)
+  await requestLoginCode(ADMIN_EMAIL)
+  const response = await signInWithCode(ADMIN_EMAIL, lastLoginCode(ADMIN_EMAIL) ?? "")
+  if (!response.ok) throw new Error(`sign-in failed: ${await response.text()}`)
   return sessionCookie(response)
 }
 

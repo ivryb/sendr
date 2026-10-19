@@ -32,10 +32,7 @@ export async function renderPage(request: Request, template: string) {
   // The first match is the auth gate; page data only matters once it lets the page through.
   const [gate, ...pages] = context.matches
   await prefetch([gate])
-  const claimed = queryClient.getQueryData<{ claimed: boolean }>([
-    "setup",
-  ])?.claimed
-  if (claimed && queryClient.getQueryData(["me"])) await prefetch(pages)
+  if (queryClient.getQueryData(["me"])) await prefetch(pages)
 
   const stream = await renderToReadableStream(
     <AppProviders client={queryClient}>

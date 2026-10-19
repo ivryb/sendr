@@ -1,0 +1,1 @@
+ALTER TABLE `settings` DROP COLUMN `claimed_setup_code_hash`;

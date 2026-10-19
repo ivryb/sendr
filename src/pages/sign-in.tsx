@@ -15,29 +15,53 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { queries } from "@/lib/api"
 import { authClient, unwrap } from "@/lib/auth-client"
+import { useAddPasskey } from "@/lib/passkeys"
 
 type Step =
-  { name: "choose" } | { name: "email" } | { name: "code"; email: string }
+  | { name: "choose" }
+  | { name: "email" }
+  | { name: "code"; email: string }
+  | { name: "passkey" }
 
-export function SignInPage() {
-  const [step, setStep] = useState<Step>({ name: "choose" })
+/** `firstSignIn`: nobody has signed in yet, so there are no passkeys to offer. */
+export function SignInPage({ firstSignIn }: { firstSignIn: boolean }) {
+  const [step, setStep] = useState<Step>(
+    firstSignIn ? { name: "email" } : { name: "choose" }
+  )
   const queryClient = useQueryClient()
   const signedIn = () =>
-    queryClient.invalidateQueries({ queryKey: queries.me.queryKey })
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: queries.me.queryKey }),
+      queryClient.invalidateQueries({ queryKey: queries.setup.queryKey }),
+    ])
+  // Admins who sign in with a code are offered a passkey until they have one.
+  const signedInWithCode = async () => {
+    // The code is spent by now, so a failed lookup must still let the admin in.
+    const passkeys = await queryClient
+      .fetchQuery(queries.passkeys)
+      .catch(() => null)
+    if (passkeys?.length === 0) setStep({ name: "passkey" })
+    else await signedIn()
+  }
 
   if (step.name === "code") {
     return (
       <CodeStep
         email={step.email}
-        onSignedIn={signedIn}
+        onSignedIn={signedInWithCode}
         onBack={() => setStep({ name: "email" })}
       />
     )
   }
+  if (step.name === "passkey") return <PasskeyStep onDone={signedIn} />
   return (
     <AuthLayout
-      title="Sign in"
-      description="Use a passkey, or get a sign-in code by email."
+      title={firstSignIn ? "Welcome to Sendr" : "Sign in"}
+      description={
+        firstSignIn
+          ? "Sign in with the email you entered when you deployed Sendr. We'll send you a code."
+          : "Use a passkey, or get a sign-in code by email."
+      }
     >
       {step.name === "choose" ? (
         <ChooseStep
@@ -47,7 +71,7 @@ export function SignInPage() {
       ) : (
         <EmailStep
           onSent={(email) => setStep({ name: "code", email })}
-          onBack={() => setStep({ name: "choose" })}
+          onBack={firstSignIn ? undefined : () => setStep({ name: "choose" })}
         />
       )}
     </AuthLayout>
@@ -94,7 +118,7 @@ function EmailStep({
   onBack,
 }: {
   onSent: (email: string) => void
-  onBack: () => void
+  onBack?: () => void
 }) {
   const send = useMutation({
     mutationFn: (email: string) =>
@@ -127,9 +151,11 @@ function EmailStep({
           {send.isPending && <Spinner />}
           Send code
         </Button>
-        <Button type="button" variant="ghost" size="lg" onClick={onBack}>
-          Use a passkey instead
-        </Button>
+        {onBack && (
+          <Button type="button" variant="ghost" size="lg" onClick={onBack}>
+            Use a passkey instead
+          </Button>
+        )}
       </div>
     </form>
   )
@@ -223,6 +249,30 @@ function CodeStep({
             </>
           )}
         </div>
+      </div>
+    </AuthLayout>
+  )
+}
+
+function PasskeyStep({ onDone }: { onDone: () => void }) {
+  const addPasskey = useAddPasskey({ onAdded: onDone })
+  return (
+    <AuthLayout
+      title="You're in"
+      description="Add a passkey so next time you sign in with Face ID, Touch ID, or your device PIN. No codes to wait for."
+    >
+      <div className="flex flex-col gap-2">
+        <Button
+          size="lg"
+          onClick={() => addPasskey.mutate()}
+          disabled={addPasskey.isPending}
+        >
+          {addPasskey.isPending ? <Spinner /> : <FingerprintIcon />}
+          Add a passkey to this device
+        </Button>
+        <Button variant="ghost" size="lg" onClick={onDone}>
+          Skip for now
+        </Button>
       </div>
     </AuthLayout>
   )

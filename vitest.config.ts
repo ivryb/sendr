@@ -9,7 +9,8 @@ export default defineConfig(async () => ({
       miniflare: {
         bindings: {
           TEST_MIGRATIONS: await readD1Migrations("./migrations"),
-          SETUP_CODE: "test-setup-code",
+          ADMIN_EMAIL: "owner@example.com",
+          LOGIN_CODE_RELAY_URL: "https://sendr.soy/api/login-code",
           EMAIL_PROVIDER: "memory",
           AUTH_EMAIL_PROVIDER: "memory",
         },

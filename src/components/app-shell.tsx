@@ -88,7 +88,9 @@ function AccountMenu() {
       <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuGroup>
           <DropdownMenuLabel className="flex flex-col gap-0.5 py-2">
-            <span className="font-medium text-foreground">{me.name}</span>
+            {me.name && (
+              <span className="font-medium text-foreground">{me.name}</span>
+            )}
             <span className="truncate font-normal">{me.email}</span>
           </DropdownMenuLabel>
         </DropdownMenuGroup>

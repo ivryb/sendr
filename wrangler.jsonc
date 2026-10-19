@@ -32,7 +32,9 @@
     "SES_CONFIGURATION_SET": "sendr",
     "SES_MAX_SENDS_PER_SECOND": "10",
     "EMAIL_PROVIDER": "ses",
-    "AUTH_EMAIL_PROVIDER": "ses"
+    "AUTH_EMAIL_PROVIDER": "ses",
+    // Delivers login codes until this instance can send its own. Empty to turn off.
+    "LOGIN_CODE_RELAY_URL": "https://sendr.soy/api/login-code"
   },
   "observability": { "enabled": true }
 }

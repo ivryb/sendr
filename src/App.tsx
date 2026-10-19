@@ -18,10 +18,9 @@ import { CampaignPage } from "@/pages/campaign"
 import { CampaignsPage } from "@/pages/campaigns"
 import { ContactsPage } from "@/pages/contacts"
 import { SettingsPage } from "@/pages/settings"
-import { SetupPage } from "@/pages/setup"
 import { SignInPage } from "@/pages/sign-in"
 
-/** Shows setup or sign-in in place, so a deep link opens once the admin is signed in. */
+/** Shows sign-in in place, so a deep link opens once the admin is signed in. */
 function AuthGate() {
   const setup = useQuery(queries.setup)
   const me = useQuery(queries.me)
@@ -32,7 +31,7 @@ function AuthGate() {
       </div>
     )
   }
-  // A failed check must not fall through to setup or sign-in: an outage isn't "unclaimed".
+  // A failed check must not fall through to sign-in: an outage isn't "signed out".
   const failed = [setup, me].find((query) => query.isError)
   if (failed) {
     return (
@@ -41,8 +40,7 @@ function AuthGate() {
       </div>
     )
   }
-  if (!setup.data?.claimed) return <SetupPage />
-  if (!me.data) return <SignInPage />
+  if (!me.data) return <SignInPage firstSignIn={!setup.data?.claimed} />
   return <Outlet />
 }
 
