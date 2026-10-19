@@ -82,3 +82,8 @@ export type ApiKey = {
   createdAt: string
   lastUsedAt: string | null
 }
+
+/** "Evan <evan@example.com>" when a name is set. */
+export function senderAddress(sender: { fromName: string; fromEmail: string }) {
+  return sender.fromName ? `${sender.fromName} <${sender.fromEmail}>` : sender.fromEmail
+}

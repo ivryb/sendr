@@ -42,8 +42,3 @@ export function toSettingsDto(row: InstanceSettings): Settings {
     webhookSecret: row.webhookSecret,
   }
 }
-
-/** "Evan <evan@example.com>" when a name is set. */
-export function senderAddress(row: InstanceSettings) {
-  return row.fromName ? `${row.fromName} <${row.fromEmail}>` : row.fromEmail
-}

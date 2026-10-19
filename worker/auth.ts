@@ -11,12 +11,8 @@ import { db } from "./db/client"
 import * as schema from "./db/schema"
 import { emailProvider } from "./email/providers"
 import { sha256, timingSafeEqual } from "./lib/crypto"
-import {
-  getSettings,
-  senderAddress,
-  updateSettings,
-  type InstanceSettings,
-} from "./lib/settings"
+import { senderAddress } from "../shared/model"
+import { getSettings, updateSettings, type InstanceSettings } from "./lib/settings"
 
 /** Auth is built per request: its secret lives in D1 and passkeys bind to the request's host. */
 export function createAuth(settings: InstanceSettings, requestUrl: string) {
