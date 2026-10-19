@@ -13,7 +13,7 @@
     "types": "wrangler types --strict-vars=false",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
-    "deploy": "vite build && wrangler d1 migrations apply DB --remote && wrangler deploy"
+    "deploy": "vite build && wrangler deploy && wrangler d1 migrations apply DB --remote"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

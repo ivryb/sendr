@@ -21,7 +21,7 @@ Sendr is single-tenant: one deployment is one sender and one contact list. Deplo
 3. Open the domain, enter your setup code, and add a passkey. In **Settings**, fill in the sender name and address, the footer (include your postal address: anti-spam laws require it), and the public URL.
 4. Connect SES (below), then create an API key in **Settings** and push your contacts.
 
-To deploy by hand instead: clone the repo, `bun install`, `bunx wrangler secret put SETUP_CODE` (and the AWS keys), then `bun run deploy`.
+To deploy by hand instead: clone the repo, `bun install`, `bunx wrangler queues create sendr-send`, then `bun run deploy -- --domain emails.example.com`. The first deploy creates the D1 database and applies migrations. Then set the secrets with `bunx wrangler secret put SETUP_CODE` (and the AWS keys).
 
 ## Connect Amazon SES
 
