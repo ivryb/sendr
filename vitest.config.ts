@@ -12,7 +12,6 @@ export default defineConfig(async () => ({
           ADMIN_EMAIL: "owner@example.com",
           LOGIN_CODE_RELAY_URL: "https://sendr.soy/api/login-code",
           EMAIL_PROVIDER: "memory",
-          AUTH_EMAIL_PROVIDER: "memory",
         },
       },
     }),

@@ -4,7 +4,7 @@ import { cn } from "cn"
 
 import { useAdmin } from "@/components/app-shell"
 import { useDebounced } from "@/lib/use-debounced"
-import { senderAddress, type Settings } from "../../shared/model"
+import { senderAddress } from "../../shared/model"
 import { renderEmail } from "../../shared/render"
 
 /**
@@ -14,29 +14,32 @@ import { renderEmail } from "../../shared/render"
 export function EmailPreview({
   subject,
   markdown,
-  settings,
+  from,
+  footer,
   className,
 }: {
   subject: string
   markdown: string
-  settings: Pick<Settings, "fromName" | "fromEmail" | "footer">
+  from: { name: string; email: string } | null
+  footer: string
   className?: string
 }) {
   const me = useAdmin()
   const debouncedSubject = useDebounced(subject)
   const debouncedMarkdown = useDebounced(markdown)
+  const debouncedFooter = useDebounced(footer)
   const email = useMemo(
     () =>
       renderEmail({
         subject: debouncedSubject,
         markdown: debouncedMarkdown,
-        footer: settings.footer,
+        footer: debouncedFooter,
         recipient: { firstName: me.name.split(" ")[0] || null, fields: {} },
         unsubscribeUrl: "#",
       }),
-    [debouncedSubject, debouncedMarkdown, settings.footer, me.name]
+    [debouncedSubject, debouncedMarkdown, debouncedFooter, me.name]
   )
-  const from = settings.fromEmail ? senderAddress(settings) : null
+  const fromAddress = from && senderAddress(from)
   // A new srcDoc reloads the frame at the top; keep the reader where they were.
   const frame = useRef<HTMLIFrameElement>(null)
   const scrollY = useRef(0)
@@ -51,9 +54,9 @@ export function EmailPreview({
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-b border-stone-200 bg-stone-50 px-4 py-3 text-[13px] text-stone-500">
         <dt>From</dt>
         <dd className="truncate text-stone-900">
-          {from ?? (
-            <Link to="/settings" className="text-amber-700 underline">
-              Add a sender in Settings
+          {fromAddress ?? (
+            <Link to="/senders" className="text-amber-700 underline">
+              Add a sender
             </Link>
           )}
         </dd>

@@ -33,12 +33,5 @@ export async function updateSettings(
 }
 
 export function toSettingsDto(row: InstanceSettings): Settings {
-  return {
-    fromName: row.fromName,
-    fromEmail: row.fromEmail,
-    replyTo: row.replyTo,
-    footer: row.footer,
-    publicUrl: row.publicUrl,
-    webhookSecret: row.webhookSecret,
-  }
+  return { footer: row.footer, publicUrl: row.publicUrl }
 }

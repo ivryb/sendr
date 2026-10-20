@@ -14,8 +14,10 @@ import {
 import { db } from "../db/client"
 import { campaigns, deliveries } from "../db/schema"
 import type { InstanceSettings } from "../lib/settings"
+import { checkSender, defaultSender } from "./senders"
 
 export const campaignInput = z.object({
+  senderId: z.string().nullable().optional(),
   subject: z.string().max(998).optional(),
   markdown: z.string().optional(),
   firstBatchSize: z.number().int().min(1).max(100_000).optional(),
@@ -33,7 +35,8 @@ export class CampaignError extends Error {
 }
 
 export async function createCampaign(input: z.infer<typeof campaignInput>) {
-  const [row] = await db().insert(campaigns).values(input).returning()
+  const senderId = input.senderId === undefined ? (await defaultSender())?.id : input.senderId
+  const [row] = await db().insert(campaigns).values({ ...input, senderId }).returning()
   return toCampaignDto(row, emptyCounts())
 }
 
@@ -70,11 +73,19 @@ export async function startCampaign(id: string, settings: InstanceSettings) {
   const missing = [
     !campaign.subject.trim() && "a subject",
     !campaign.markdown.trim() && "a message",
-    !settings.fromEmail && "a sender address in Settings",
+    !campaign.senderId && "a sender",
     !settings.publicUrl && "a public URL in Settings",
   ].filter(Boolean)
   if (missing.length) {
     throw new CampaignError("not_ready", `Add ${missing.join(", ")} before sending.`)
+  }
+  // Checked live: an unverified address would make every email in the campaign fail.
+  const check = await checkSender(campaign.senderId!)
+  if (!check.ok || !check.sender.verified) {
+    throw new CampaignError(
+      "not_ready",
+      `${check.sender.email} isn't verified yet. Finish its setup in Senders before sending.`
+    )
   }
 
   // Idempotent: a repeated or concurrent start inserts nothing new, and only one request
@@ -205,6 +216,7 @@ function toCampaignDto(row: typeof campaigns.$inferSelect, counts: CampaignCount
     subject: row.subject,
     markdown: row.markdown,
     status: row.status,
+    senderId: row.senderId,
     firstBatchSize: row.firstBatchSize,
     createdAt: row.createdAt.toISOString(),
     startedAt: row.startedAt?.toISOString() ?? null,

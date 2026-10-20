@@ -21,14 +21,20 @@ import {
   setContactStatus,
 } from "../domain/contacts"
 import { sendTestEmail } from "../domain/sending"
+import {
+  checkSender,
+  connectSender,
+  deleteSender,
+  listSenders,
+  senderChanges,
+  senderInput,
+  updateSender,
+} from "../domain/senders"
 import { getSettings, toSettingsDto, updateSettings } from "../lib/settings"
 import { parseJson } from "./validation"
 
 const settingsInput = z
   .object({
-    fromName: z.string().trim(),
-    fromEmail: z.union([z.email(), z.literal("")]),
-    replyTo: z.union([z.email(), z.literal("")]),
     footer: z.string(),
     publicUrl: z.union([
       z.url().transform((url) => url.replace(/\/+$/, "")),
@@ -53,6 +59,20 @@ export const adminApi = new Hono<AdminEnv>()
   .put("/settings", async (c) => {
     const input = await parseJson(c, settingsInput)
     return c.json(toSettingsDto(await updateSettings(input)))
+  })
+
+  .get("/senders", async (c) => c.json({ senders: await listSenders() }))
+  .post("/senders", async (c) => {
+    const input = await parseJson(c, senderInput)
+    return c.json({ sender: await connectSender(input, await getSettings()) })
+  })
+  .get("/senders/:id", async (c) => c.json(await checkSender(c.req.param("id"))))
+  .patch("/senders/:id", async (c) =>
+    c.json({ sender: await updateSender(c.req.param("id"), await parseJson(c, senderChanges)) })
+  )
+  .delete("/senders/:id", async (c) => {
+    await deleteSender(c.req.param("id"))
+    return c.json({ ok: true })
   })
 
   .get("/contacts", async (c) => {

@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { Campaign } from "../shared/model"
 import worker from "../worker"
-import { request, sentEmails, signInAsAdmin } from "./helpers"
+import { fakeAws } from "./fake-aws"
+import { addSender, request, sentEmails, signInAsAdmin } from "./helpers"
 
 let admin: string
 let apiKey: string
@@ -13,12 +14,9 @@ beforeEach(async () => {
   await request("/api/admin/settings", {
     method: "PUT",
     cookie: admin,
-    json: {
-      fromName: "Evan",
-      fromEmail: "evan@example.com",
-      footer: "Example Inc, 1 Main St",
-    },
+    json: { footer: "Example Inc, 1 Main St" },
   })
+  await addSender(admin)
   const created = await request("/api/admin/api-keys", {
     cookie: admin,
     json: { name: "test" },
@@ -166,15 +164,26 @@ describe("sending a campaign", () => {
     await act(id, "start")
     expect((await act(id, "start")).status).toBe(409)
 
-    await request("/api/admin/settings", {
+    const draft = await newCampaign()
+    await request(`/api/admin/campaigns/${draft.id}`, {
       method: "PUT",
       cookie: admin,
-      json: { fromEmail: "" },
+      json: { senderId: null },
     })
-    const draft = await newCampaign()
     const response = await act(draft.id, "start")
     expect(response.status).toBe(400)
     expect(await response.json()).toMatchObject({ error: "not_ready" })
+  })
+
+  it("won't send from an address its provider hasn't verified", async () => {
+    await addContacts(1)
+    const { id } = await newCampaign()
+    fakeAws.verified = false
+    const response = await act(id, "start")
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({
+      message: "evan@example.com isn't verified yet. Finish its setup in Senders before sending.",
+    })
   })
 
   it("only drafts can be edited", async () => {

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm"
 import {
   index,
   integer,
+  real,
   sqliteTable,
   text,
   uniqueIndex,
@@ -49,6 +50,26 @@ export const contacts = sqliteTable(
   (table) => [index("contacts_status_idx").on(table.status)]
 )
 
+/** An address campaigns and login codes come from, with the email service that sends for it. */
+export const senders = sqliteTable("senders", {
+  id: id(),
+  name: text("name").notNull().default(""),
+  email: text("email").notNull(),
+  replyTo: text("reply_to").notNull().default(""),
+  provider: text("provider", { enum: ["ses"] }).notNull().default("ses"),
+  region: text("region").notNull(),
+  accessKeyId: text("access_key_id").notNull(),
+  secretAccessKey: text("secret_access_key").notNull(),
+  // The provider's view as of the last check, so lists don't call it on every load.
+  verified: integer("verified", { mode: "boolean" }).notNull().default(false),
+  production: integer("production", { mode: "boolean" }).notNull().default(false),
+  maxSendRate: real("max_send_rate").notNull().default(1),
+  // Delivery reports arrive through this SNS topic once AWS confirms the subscription.
+  eventsTopicArn: text("events_topic_arn"),
+  eventsConnected: integer("events_connected", { mode: "boolean" }).notNull().default(false),
+  createdAt: createdAt(),
+})
+
 export const campaigns = sqliteTable("campaigns", {
   id: id(),
   subject: text("subject").notNull().default(""),
@@ -56,6 +77,7 @@ export const campaigns = sqliteTable("campaigns", {
   status: text("status", { enum: CAMPAIGN_STATUSES })
     .notNull()
     .default("draft"),
+  senderId: text("sender_id").references(() => senders.id, { onDelete: "set null" }),
   firstBatchSize: integer("first_batch_size").notNull().default(200),
   createdAt: createdAt(),
   updatedAt: timestamp("updated_at")
@@ -108,12 +130,10 @@ export const apiKeys = sqliteTable("api_keys", {
 /** One row (id 1) holding operator settings and secrets generated on first run. */
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey(),
-  fromName: text("from_name").notNull().default(""),
-  fromEmail: text("from_email").notNull().default(""),
-  replyTo: text("reply_to").notNull().default(""),
   footer: text("footer").notNull().default(""),
   publicUrl: text("public_url").notNull().default(""),
   // Signs Better Auth sessions and email link tokens.
   secret: text("secret").notNull(),
+  // Part of the URL providers post delivery reports to, so only they can.
   webhookSecret: text("webhook_secret").notNull(),
 })

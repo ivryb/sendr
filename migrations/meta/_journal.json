@@ -15,6 +15,13 @@
       "when": 1792389505692,
       "tag": "0001_drop_setup_code",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792467125836,
+      "tag": "0002_senders",
+      "breakpoints": true
     }
   ]
 }

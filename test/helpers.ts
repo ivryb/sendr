@@ -1,5 +1,7 @@
+import { env } from "cloudflare:test"
 import { exports } from "cloudflare:workers"
 
+import type { Sender } from "../shared/model"
 import { memoryOutbox } from "../worker/email/providers"
 
 export const ORIGIN = "https://sendr.test"
@@ -64,4 +66,29 @@ export function sessionCookie(response: Response) {
 
 export function sentEmails() {
   return memoryOutbox
+}
+
+export const SENDER = {
+  name: "Evan",
+  email: "evan@example.com",
+  region: "us-east-1",
+  accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+  secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+}
+
+/** Connects a sender through the API, against the fake AWS in test/fake-aws.ts. */
+export async function addSender(cookie: string, input: Partial<typeof SENDER> = {}) {
+  const response = await request("/api/admin/senders", { cookie, json: { ...SENDER, ...input } })
+  if (!response.ok) throw new Error(`adding a sender failed: ${await response.text()}`)
+  const { sender } = await response.json<{ sender: Sender }>()
+  // Verification is read on check, as the sender page does.
+  await request(`/api/admin/senders/${sender.id}`, { cookie })
+  return sender
+}
+
+export async function webhookSecret() {
+  const row = await env.DB.prepare("SELECT webhook_secret AS secret FROM settings").first<{
+    secret: string
+  }>()
+  return row!.secret
 }

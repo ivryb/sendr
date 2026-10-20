@@ -1,4 +1,5 @@
 import {
+  AtSignIcon,
   ChevronsUpDownIcon,
   KeyRoundIcon,
   LogOutIcon,
@@ -45,6 +46,7 @@ import { useAddPasskey } from "@/lib/passkeys"
 const NAV = [
   { to: "/campaigns", label: "Campaigns", icon: MailIcon },
   { to: "/contacts", label: "Contacts", icon: UsersIcon },
+  { to: "/senders", label: "Senders", icon: AtSignIcon },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ]
 

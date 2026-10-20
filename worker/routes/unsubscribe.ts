@@ -5,6 +5,7 @@ import { html } from "hono/html"
 import { db } from "../db/client"
 import { contacts } from "../db/schema"
 import { setContactStatus } from "../domain/contacts"
+import { defaultSender } from "../domain/senders"
 import { UNSUBSCRIBE_PURPOSE } from "../domain/sending"
 import { verifyToken } from "../lib/crypto"
 import { getSettings } from "../lib/settings"
@@ -47,7 +48,9 @@ async function findRecipient(token: string) {
   const contactId = await verifyToken(settings.secret, UNSUBSCRIBE_PURPOSE, token)
   if (!contactId) return null
   const contact = await db().query.contacts.findFirst({ where: eq(contacts.id, contactId) })
-  return contact ? { contact, sender: settings.fromName || "this sender" } : null
+  if (!contact) return null
+  // Unsubscribing covers every sender here; the main one names the list.
+  return { contact, sender: (await defaultSender())?.name || "this sender" }
 }
 
 function unsubscribedPage(sender: string, token: string) {

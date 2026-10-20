@@ -8,7 +8,8 @@ import { desc, eq } from "drizzle-orm"
 
 import { db } from "./db/client"
 import * as schema from "./db/schema"
-import { emailProvider } from "./email/providers"
+import { defaultSender, type SenderRow } from "./domain/senders"
+import { memoryProvider, senderProvider } from "./email/providers"
 import { loginCodeEmail } from "../shared/login-code"
 import { senderAddress } from "../shared/model"
 import { getSettings, updateSettings, type InstanceSettings } from "./lib/settings"
@@ -26,7 +27,9 @@ export function createAuth(settings: InstanceSettings, requestUrl: string) {
       passkey({ rpID: new URL(origin).hostname, rpName: "Sendr", origin }),
       emailOTP({
         sendVerificationOTP: async ({ email, otp }) => {
-          if (await canSignIn(email)) waitUntil(sendLoginCode(settings, email, otp))
+          // Both lookups run for every address, so response timing doesn't reveal admins.
+          const [allowed, sender] = await Promise.all([canSignIn(email), defaultSender()])
+          if (allowed) waitUntil(sendLoginCode(sender, email, otp))
         },
       }),
     ],
@@ -92,25 +95,26 @@ async function canSignIn(email: string) {
 }
 
 /**
- * Sends from the instance's own sender once it has one. Before that, or when that send fails
- * (SES not set up yet, or still in its sandbox), sendr.soy delivers the code so a new
- * instance's admin is never locked out.
+ * Sends from the instance's own sender once one is verified. Before that, or when that send
+ * fails (SES still in its sandbox, say), sendr.soy delivers the code so a new instance's admin
+ * is never locked out.
  */
-async function sendLoginCode(settings: InstanceSettings, email: string, otp: string) {
-  const sendOwn = () =>
-    emailProvider(env.AUTH_EMAIL_PROVIDER).send({
-      from: senderAddress(settings),
-      to: email,
-      ...loginCodeEmail(otp),
-    })
+async function sendLoginCode(sender: SenderRow | null, email: string, otp: string) {
+  const message = { to: email, ...loginCodeEmail(otp) }
   const relay = env.LOGIN_CODE_RELAY_URL
-  if (!relay) return void (await sendOwn())
-  if (settings.fromEmail) {
+  if (sender?.verified) {
     try {
-      return void (await sendOwn())
+      return void (await senderProvider(sender).send({ from: senderAddress(sender), ...message }))
     } catch (error) {
+      if (!relay) throw error
       console.warn("Login code send failed, delivering it through sendr.soy instead", error)
     }
+  }
+  if (!relay) {
+    // Local development: no sender yet, and the dev log shows the code.
+    const memory = memoryProvider()
+    if (!memory) throw new Error("No verified sender and no LOGIN_CODE_RELAY_URL to send login codes.")
+    return void (await memory.send({ from: "Sendr <login@localhost>", ...message }))
   }
   const response = await fetch(relay, {
     method: "POST",

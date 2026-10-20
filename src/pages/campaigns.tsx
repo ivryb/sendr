@@ -15,17 +15,17 @@ import { usePolling } from "@/lib/use-polling"
 import type { Campaign } from "../../shared/model"
 import { listCampaigns } from "../../worker/domain/campaigns"
 import { contactCounts } from "../../worker/domain/contacts"
-import { getSettings } from "../../worker/lib/settings"
+import { listSenders } from "../../worker/domain/senders"
 
 export async function loader() {
-  const [campaigns, settings, counts] = await Promise.all([
+  const [campaigns, senders, counts] = await Promise.all([
     listCampaigns(),
-    getSettings(),
+    listSenders(),
     contactCounts(),
   ])
   return {
     campaigns,
-    hasSender: Boolean(settings.fromEmail),
+    hasSender: senders.some((sender) => sender.verified),
     hasContacts: Object.values(counts).some(Boolean),
   }
 }
@@ -128,10 +128,10 @@ function GettingStarted({
     {
       done: hasSender,
       title: "Add a sender",
-      body: "Choose the name and address your emails come from, and your postal address for the footer.",
+      body: "Connect Amazon SES and verify the domain your emails come from.",
       action: (
-        <Link to="/settings" className={STEP_ACTION}>
-          Open Settings
+        <Link to="/senders" className={STEP_ACTION}>
+          Open Senders
         </Link>
       ),
     },

@@ -8,12 +8,13 @@ import {
   Trash2Icon,
   TriangleAlertIcon,
 } from "lucide-react"
-import { useNavigate, useRevalidator } from "react-router"
+import { Link, useNavigate, useRevalidator } from "react-router"
 import { toast } from "sonner"
 import { cn } from "cn"
 
 import { useAdmin } from "@/components/app-shell"
 import { BackToCampaigns } from "@/components/back-link"
+import { senderLabel } from "@/components/senders"
 import { EmailPreview } from "@/components/email-preview"
 import { Button } from "@/components/ui/button"
 import {
@@ -33,29 +34,51 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { api } from "@/lib/api"
 import { formatNumber, plural } from "@/lib/format"
 import { useChange } from "@/lib/mutations"
-import type { Campaign, Settings } from "../../shared/model"
+import type { Campaign, Sender } from "../../shared/model"
 
-type Draft = Pick<Campaign, "subject" | "markdown" | "firstBatchSize">
+type Draft = Pick<
+  Campaign,
+  "subject" | "markdown" | "firstBatchSize" | "senderId"
+>
 
 const MERGE_TAGS = ["{{first_name|there}}", "{{fields.name|fallback}}"]
 
 export function CampaignEditor({
   campaign,
-  settings,
+  senders,
+  footer,
   subscribed,
 }: {
   campaign: Campaign
-  settings: Pick<Settings, "fromName" | "fromEmail" | "footer">
+  senders: Sender[]
+  footer: string
   subscribed: number
 }) {
-  const autosave = useAutosave(campaign)
-  const { draft, update } = autosave
+  const campaignSave = useAutosave(
+    pickDraft(campaign),
+    `/api/admin/campaigns/${campaign.id}`
+  )
+  // The footer is shared by every campaign, so it saves to the instance's settings.
+  const footerSave = useAutosave({ footer }, "/api/admin/settings")
+  const saves = [campaignSave, footerSave]
+  const flush = async () => {
+    await Promise.all(saves.map((save) => save.flush()))
+  }
+  const { value: draft, update } = campaignSave
+  const sender = senders.find(({ id }) => id === draft.senderId) ?? null
   const [tab, setTab] = useState<"write" | "preview">("write")
   const body = useRef<HTMLTextAreaElement>(null)
 
@@ -76,13 +99,13 @@ export function CampaignEditor({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <BackToCampaigns />
         <div className="flex items-center gap-2">
-          <SaveIndicator autosave={autosave} />
-          <SendTestButton id={campaign.id} flush={autosave.flush} />
+          <SaveIndicator saves={saves} />
+          <SendTestButton id={campaign.id} flush={flush} />
           <StartButton
             campaign={campaign}
             draft={draft}
             subscribed={subscribed}
-            flush={autosave.flush}
+            flush={flush}
           />
           <DraftMenu id={campaign.id} />
         </div>
@@ -104,10 +127,17 @@ export function CampaignEditor({
           autoFocus={!campaign.subject}
           className="field-sizing-content w-full resize-none bg-transparent text-2xl font-semibold tracking-tight text-balance outline-none placeholder:text-muted-foreground/50 sm:text-3xl"
         />
-        <FirstBatchField
-          value={draft.firstBatchSize}
-          onChange={(firstBatchSize) => update({ firstBatchSize })}
-        />
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <SenderField
+            senders={senders}
+            value={draft.senderId}
+            onChange={(senderId) => update({ senderId })}
+          />
+          <FirstBatchField
+            value={draft.firstBatchSize}
+            onChange={(firstBatchSize) => update({ firstBatchSize })}
+          />
+        </div>
       </div>
 
       <Tabs
@@ -137,7 +167,7 @@ export function CampaignEditor({
             }
             aria-label="Message"
             spellCheck
-            className="h-[max(26rem,calc(100svh-22rem))] resize-none rounded-xl bg-card px-4 py-3.5 font-mono text-[13.5px]/relaxed shadow-xs"
+            className="h-[max(20rem,calc(100svh-32rem))] resize-none rounded-xl bg-card px-4 py-3.5 font-mono text-[13.5px]/relaxed shadow-xs"
           />
           <p className="text-xs/relaxed text-muted-foreground">
             Markdown works. Personalize with{" "}
@@ -156,11 +186,30 @@ export function CampaignEditor({
             ))}
             . The text after the bar shows when a contact has no value.
           </p>
+          <div className="flex flex-col gap-1.5 pt-3">
+            <label htmlFor="footer" className="text-sm font-medium">
+              Footer
+            </label>
+            <Textarea
+              id="footer"
+              value={footerSave.value.footer}
+              onChange={(event) =>
+                footerSave.update({ footer: event.target.value })
+              }
+              placeholder={"Acme Inc.\n1 Main Street, Springfield, CA 90000"}
+              className="min-h-20 resize-y rounded-xl bg-card px-4 py-3 font-mono text-[13px]/relaxed shadow-xs"
+            />
+            <p className="text-xs/relaxed text-muted-foreground">
+              Shared by every campaign, above the unsubscribe link. Include your
+              postal address: anti-spam laws require one.
+            </p>
+          </div>
         </div>
         <EmailPreview
           subject={draft.subject}
           markdown={draft.markdown}
-          settings={settings}
+          from={sender}
+          footer={footerSave.value.footer}
           className={cn(
             "h-[max(26rem,calc(100svh-22rem))]",
             tab !== "preview" && "hidden lg:flex"
@@ -172,34 +221,35 @@ export function CampaignEditor({
 }
 
 /**
- * Keeps a local copy of the draft and saves it shortly after each change.
+ * Keeps a local copy of `initial` and PUTs it to `path` shortly after each change.
  * `flush` saves immediately, for actions that need the server copy to be current.
  */
-function useAutosave(campaign: Campaign) {
+function useAutosave<T extends Record<string, unknown>>(
+  initial: T,
+  path: string
+) {
   const { revalidate } = useRevalidator()
-  const [draft, setDraft] = useState<Draft>(() => pickDraft(campaign))
-  const [saved, setSaved] = useState<Draft>(draft)
-  const path = `/api/admin/campaigns/${campaign.id}`
+  const [value, setValue] = useState(initial)
+  const [saved, setSaved] = useState(initial)
   const save = useMutation({
-    mutationFn: (values: Draft) =>
-      api<{ campaign: Campaign }>(path, { method: "PUT", body: values }),
-    onSuccess: (_, values) => setSaved(values),
+    mutationFn: (next: T) => api(path, { method: "PUT", body: next }),
+    onSuccess: (_, next) => setSaved(next),
     meta: { silent: true },
   })
-  const dirty = !sameDraft(draft, saved)
+  const dirty = !sameValues(value, saved)
   const { mutate, mutateAsync } = save
 
   useEffect(() => {
     if (!dirty || save.isPending) return
-    const timer = setTimeout(() => mutate(draft), 700)
+    const timer = setTimeout(() => mutate(value), 700)
     return () => clearTimeout(timer)
-  }, [draft, dirty, save.isPending, mutate])
+  }, [value, dirty, save.isPending, mutate])
 
   // Leaving within the debounce window still keeps the last keystrokes.
-  const pending = useRef<Draft | null>(null)
+  const pending = useRef<T | null>(null)
   useEffect(() => {
-    pending.current = dirty ? draft : null
-  }, [draft, dirty])
+    pending.current = dirty ? value : null
+  }, [value, dirty])
   useEffect(
     () => () => {
       const edits = pending.current
@@ -213,42 +263,49 @@ function useAutosave(campaign: Campaign) {
   )
 
   return {
-    draft,
-    update: (patch: Partial<Draft>) =>
-      setDraft((current) => ({ ...current, ...patch })),
+    value,
+    update: (patch: Partial<T>) =>
+      setValue((current) => ({ ...current, ...patch })),
     status:
       save.isPending || (dirty && !save.isError)
         ? ("saving" as const)
         : dirty
           ? ("error" as const)
           : ("saved" as const),
-    retry: () => mutate(draft),
+    retry: () => mutate(value),
     flush: async () => {
-      if (dirty) await mutateAsync(draft)
+      if (dirty) await mutateAsync(value)
     },
   }
 }
 
-function pickDraft({ subject, markdown, firstBatchSize }: Campaign): Draft {
-  return { subject, markdown, firstBatchSize }
+function pickDraft({
+  subject,
+  markdown,
+  firstBatchSize,
+  senderId,
+}: Campaign): Draft {
+  return { subject, markdown, firstBatchSize, senderId }
 }
 
-function sameDraft(a: Draft, b: Draft) {
-  return (
-    a.subject === b.subject &&
-    a.markdown === b.markdown &&
-    a.firstBatchSize === b.firstBatchSize
-  )
+function sameValues<T extends Record<string, unknown>>(a: T, b: T) {
+  return Object.keys(a).every((key) => a[key] === b[key])
 }
 
-type Autosave = ReturnType<typeof useAutosave>
+type Autosave = Pick<ReturnType<typeof useAutosave>, "status" | "retry">
 
-function SaveIndicator({ autosave }: { autosave: Autosave }) {
-  if (autosave.status === "error") {
+function SaveIndicator({ saves }: { saves: Autosave[] }) {
+  const failed = saves.filter((save) => save.status === "error")
+  const status = failed.length
+    ? "error"
+    : saves.some((save) => save.status === "saving")
+      ? "saving"
+      : "saved"
+  if (status === "error") {
     return (
       <button
         type="button"
-        onClick={autosave.retry}
+        onClick={() => failed.forEach((save) => save.retry())}
         className="inline-flex items-center gap-1.5 px-1 text-xs text-destructive"
       >
         <TriangleAlertIcon className="size-3.5" />
@@ -261,15 +318,60 @@ function SaveIndicator({ autosave }: { autosave: Autosave }) {
       aria-live="polite"
       className="inline-flex items-center gap-1.5 px-1 text-xs text-muted-foreground"
     >
-      {autosave.status === "saving" ? (
+      {status === "saving" ? (
         <Spinner className="size-3.5" />
       ) : (
         <CheckIcon className="size-3.5" />
       )}
       <span className="sr-only sm:not-sr-only">
-        {autosave.status === "saving" ? "Saving…" : "Saved"}
+        {status === "saving" ? "Saving…" : "Saved"}
       </span>
     </span>
+  )
+}
+
+function SenderField({
+  senders,
+  value,
+  onChange,
+}: {
+  senders: Sender[]
+  value: string | null
+  onChange: (senderId: string | null) => void
+}) {
+  if (senders.length === 0) {
+    return (
+      <span className="text-sm text-muted-foreground">
+        From{" "}
+        <Link
+          to="/senders/new"
+          className="font-medium text-foreground underline underline-offset-4"
+        >
+          Add a sender
+        </Link>
+      </span>
+    )
+  }
+  const items = senders.map((sender) => ({
+    value: sender.id,
+    label: senderLabel(sender),
+  }))
+  return (
+    <label className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+      From
+      <Select items={items} value={value} onValueChange={onChange}>
+        <SelectTrigger size="sm" className="min-w-0 text-foreground">
+          <SelectValue placeholder="Choose a sender" />
+        </SelectTrigger>
+        <SelectContent>
+          {items.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </label>
   )
 }
 

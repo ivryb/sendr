@@ -74,7 +74,7 @@ type SesEventDetail = {
 }
 
 /**
- * Reads SES events delivered by EventBridge (the full event, or just its `detail`).
+ * Reads SES events: an SNS notification's message, or an EventBridge event or its `detail`.
  * Only permanent bounces count: transient ones are retried by SES itself.
  */
 export function parseSesEvents(body: unknown): ProviderEvent[] {

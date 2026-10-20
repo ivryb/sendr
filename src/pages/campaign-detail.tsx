@@ -38,7 +38,7 @@ import {
   type Campaign,
   type CampaignAction,
   type DeliveryStatus,
-  type Settings,
+  type Sender,
 } from "../../shared/model"
 
 type RunAction = Exclude<CampaignAction, "start">
@@ -82,10 +82,12 @@ const COUNT_CARDS: DeliveryStatus[] = [
 
 export function CampaignDetail({
   campaign,
-  settings,
+  sender,
+  footer,
 }: {
   campaign: Campaign
-  settings: Pick<Settings, "fromName" | "fromEmail" | "footer">
+  sender: Sender | null
+  footer: string
 }) {
   const { formatDateTime } = useDates()
   const actions = CAMPAIGN_ACTIONS[campaign.status].filter(
@@ -155,7 +157,8 @@ export function CampaignDetail({
         <EmailPreview
           subject={campaign.subject}
           markdown={campaign.markdown}
-          settings={settings}
+          from={sender}
+          footer={footer}
           className="h-[36rem]"
         />
       </section>
@@ -253,17 +256,19 @@ function Review({ campaign }: { campaign: Campaign }) {
         <h2 className="font-medium">Check the first batch</h2>
         <p className="max-w-prose text-sm/relaxed text-muted-foreground">
           {reported === 0
-            ? "Delivery reports usually arrive within a few minutes. If none show up, check the SES events setup in Settings."
+            ? "Delivery reports usually arrive within a few minutes. If none show up, check that the sender's delivery reports are connected."
             : tooHigh
               ? "Too many messages are bouncing or being marked as spam. Cancel this campaign and clean up your list before sending more: high rates can get your Amazon SES account paused."
               : `This looks healthy. Below ${formatPercent(RATE_LIMITS.bounced)} bounces and ${formatPercent(RATE_LIMITS.complained)} complaints, it's safe to send to everyone else.`}
         </p>
         {reported === 0 && (
           <Link
-            to="/settings"
+            to={
+              campaign.senderId ? `/senders/${campaign.senderId}` : "/senders"
+            }
             className="w-fit text-sm font-medium underline underline-offset-4"
           >
-            Check SES events
+            Check the sender
           </Link>
         )}
       </div>

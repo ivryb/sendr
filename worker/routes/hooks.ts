@@ -1,27 +1,43 @@
 import { Hono } from "hono"
 
+import { markEventsConnected } from "../domain/senders"
 import { applyProviderEvents } from "../domain/events"
-import type { ProviderEvent } from "../email/provider"
 import { parseSesEvents } from "../email/ses"
 import { timingSafeEqual } from "../lib/crypto"
 import { getSettings } from "../lib/settings"
 
-const EVENT_PARSERS: Record<string, (body: unknown) => ProviderEvent[]> = {
-  ses: parseSesEvents,
+type SnsMessage = {
+  Type?: string
+  TopicArn?: string
+  SubscribeURL?: string
+  Message?: string
 }
 
-/** Provider event webhooks, authenticated by the instance's webhook secret header. */
-export const hooks = new Hono().post("/:provider", async (c) => {
-  const parse = EVENT_PARSERS[c.req.param("provider")]
-  if (!parse) return c.json({ error: "unknown_provider" }, 404)
-
+/**
+ * Delivery reports from SES, through the SNS topic each sender sets up. The webhook secret in
+ * the path keeps anyone else from posting fake bounces.
+ */
+export const hooks = new Hono().post("/ses/:secret", async (c) => {
   const { webhookSecret } = await getSettings()
-  const secret = c.req.header("x-sendr-secret") ?? ""
-  if (!timingSafeEqual(secret, webhookSecret)) {
+  if (!timingSafeEqual(c.req.param("secret"), webhookSecret)) {
     return c.json({ error: "invalid_secret" }, 401)
   }
-
-  const events = parse(await c.req.json().catch(() => null))
-  await applyProviderEvents(events)
-  return c.json({ received: events.length })
+  // SNS posts JSON labelled text/plain.
+  const message = JSON.parse(await c.req.text()) as SnsMessage
+  if (message.Type === "SubscriptionConfirmation") {
+    if (!isSnsUrl(message.SubscribeURL)) return c.json({ error: "invalid_subscribe_url" }, 400)
+    const confirmed = await fetch(message.SubscribeURL)
+    if (!confirmed.ok) return c.json({ error: "confirmation_failed" }, 502)
+  } else if (message.Type === "Notification") {
+    await applyProviderEvents(parseSesEvents(JSON.parse(message.Message ?? "null")))
+  }
+  if (message.TopicArn) await markEventsConnected(message.TopicArn)
+  return c.json({ ok: true })
 })
+
+/** Confirming only fetches AWS's own SNS URLs, never one an attacker picked. */
+function isSnsUrl(url: string | undefined): url is string {
+  if (!url) return false
+  const { protocol, hostname } = new URL(url)
+  return protocol === "https:" && /^sns\.[a-z0-9-]+\.amazonaws\.com$/.test(hostname)
+}

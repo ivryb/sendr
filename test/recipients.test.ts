@@ -1,18 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { Campaign, Contact, Settings } from "../shared/model"
-import { request, sentEmails, signInAsAdmin } from "./helpers"
+import type { Campaign, Contact } from "../shared/model"
+import { TOPIC_ARN } from "./fake-aws"
+import { addSender, request, sentEmails, signInAsAdmin, webhookSecret } from "./helpers"
 
 let admin: string
 let apiKey: string
 
 beforeEach(async () => {
   admin = await signInAsAdmin()
-  await request("/api/admin/settings", {
-    method: "PUT",
-    cookie: admin,
-    json: { fromName: "Evan", fromEmail: "evan@example.com" },
-  })
+  await addSender(admin)
   const created = await request("/api/admin/api-keys", { cookie: admin, json: { name: "t" } })
   apiKey = (await created.json<{ key: string }>()).key
   await request("/api/v1/contacts/batch", {
@@ -98,12 +95,10 @@ describe("unsubscribing", () => {
 })
 
 describe("provider events", () => {
+  /** Posts an SES event the way SNS delivers it. */
   async function postSesEvent(event: unknown, secret?: string) {
-    const settings = await request("/api/admin/settings", { cookie: admin })
-    const { webhookSecret } = await settings.json<Settings>()
-    return request("/hooks/ses", {
-      json: event,
-      headers: { "x-sendr-secret": secret ?? webhookSecret },
+    return request(`/hooks/ses/${secret ?? (await webhookSecret())}`, {
+      json: { Type: "Notification", TopicArn: TOPIC_ARN, Message: JSON.stringify(event) },
     })
   }
 
@@ -120,9 +115,9 @@ describe("provider events", () => {
   }
 
   const sesEvent = (eventType: string, messageId: string, extra = {}) => ({
-    "detail-type": `Email ${eventType}`,
-    source: "aws.ses",
-    detail: { eventType, mail: { messageId }, ...extra },
+    eventType,
+    mail: { messageId },
+    ...extra,
   })
 
   it("rejects events without the webhook secret", async () => {

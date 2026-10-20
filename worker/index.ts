@@ -4,6 +4,7 @@ import { HTTPException } from "hono/http-exception"
 
 import { createAuth, isClaimed } from "./auth"
 import { CampaignError, type SendMessage } from "./domain/campaigns"
+import { SenderError } from "./domain/senders"
 import { processSendMessage } from "./domain/sending"
 import { getSettings } from "./lib/settings"
 import { adminApi } from "./routes/admin"
@@ -12,6 +13,7 @@ import { publicApi } from "./routes/publicApi"
 import { unsubscribe } from "./routes/unsubscribe"
 
 const CAMPAIGN_ERROR_STATUS = { not_found: 404, invalid_action: 409, not_ready: 400 } as const
+const SENDER_ERROR_STATUS = { not_found: 404, invalid: 400 } as const
 
 const app = new Hono<{ Bindings: Env }>()
   .on(["GET", "POST"], "/api/auth/*", async (c) =>
@@ -29,6 +31,9 @@ const app = new Hono<{ Bindings: Env }>()
         { error: error.code, message: error.message },
         CAMPAIGN_ERROR_STATUS[error.code]
       )
+    }
+    if (error instanceof SenderError) {
+      return c.json({ error: error.code, message: error.message }, SENDER_ERROR_STATUS[error.code])
     }
     console.error(error)
     return c.json({ error: "internal_error" }, 500)

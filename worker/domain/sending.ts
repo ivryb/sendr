@@ -5,11 +5,12 @@ import { renderEmail } from "../../shared/render"
 import { db } from "../db/client"
 import { contacts, deliveries } from "../db/schema"
 import { PermanentSendError, type EmailProvider } from "../email/provider"
-import { emailProvider } from "../email/providers"
+import { senderProvider } from "../email/providers"
 import { signToken } from "../lib/crypto"
 import { senderAddress } from "../../shared/model"
 import { getSettings, type InstanceSettings } from "../lib/settings"
-import { advanceCampaign, findCampaign, type SendMessage } from "./campaigns"
+import { advanceCampaign, CampaignError, findCampaign, type SendMessage } from "./campaigns"
+import { campaignSender } from "./senders"
 
 export const UNSUBSCRIBE_PURPOSE = "unsubscribe"
 
@@ -26,7 +27,10 @@ export async function processSendMessage({ campaignId }: SendMessage) {
   if (campaign?.status !== "first_batch" && campaign?.status !== "sending") return
 
   const settings = await getSettings()
-  const provider = emailProvider(env.EMAIL_PROVIDER)
+  // Senders can't be removed while their campaign sends, so this only fails on a broken database.
+  const sender = await campaignSender(campaign)
+  if (!sender) throw new Error(`Campaign ${campaignId} has no sender.`)
+  const provider = senderProvider(sender)
   const rows = await db()
     .select({ delivery: deliveries, contact: contacts })
     .from(deliveries)
@@ -57,8 +61,8 @@ export async function processSendMessage({ campaignId }: SendMessage) {
     })
     try {
       const { providerMessageId } = await provider.send({
-        from: senderAddress(settings),
-        replyTo: settings.replyTo || undefined,
+        from: senderAddress(sender),
+        replyTo: sender.replyTo || undefined,
         to: contact.email,
         ...email,
         headers: unsubscribeHeaders(url),
@@ -88,6 +92,8 @@ export async function sendTestEmail(
   to: { email: string; name: string }
 ) {
   const campaign = await findCampaign(campaignId)
+  const sender = await campaignSender(campaign)
+  if (!sender) throw new CampaignError("not_ready", "Choose who this campaign is from first.")
   const settings = await getSettings()
   const url = `${settings.publicUrl}/u/test`
   const email = renderEmail({
@@ -97,9 +103,9 @@ export async function sendTestEmail(
     recipient: { firstName: to.name.split(" ")[0] || null, fields: {} },
     unsubscribeUrl: url,
   })
-  await emailProvider(env.EMAIL_PROVIDER).send({
-    from: senderAddress(settings),
-    replyTo: settings.replyTo || undefined,
+  await senderProvider(sender).send({
+    from: senderAddress(sender),
+    replyTo: sender.replyTo || undefined,
     to: to.email,
     ...email,
   })

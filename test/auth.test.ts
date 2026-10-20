@@ -2,6 +2,7 @@ import { env } from "cloudflare:test"
 import { describe, expect, it } from "vitest"
 
 import {
+  addSender,
   ADMIN_EMAIL,
   lastLoginCode,
   relayedCodes,
@@ -64,11 +65,7 @@ describe("first sign-in", () => {
 describe("signing in", () => {
   it("once the instance has a sender, codes come from it", async () => {
     const admin = await signInAsAdmin()
-    await request("/api/admin/settings", {
-      method: "PUT",
-      cookie: admin,
-      json: { fromName: "Owner", fromEmail: "hello@example.com" },
-    })
+    await addSender(admin, { name: "Owner", email: "hello@example.com" })
     relayedCodes.length = 0
 
     await requestLoginCode(ADMIN_EMAIL)

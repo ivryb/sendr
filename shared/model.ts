@@ -49,6 +49,7 @@ export type Campaign = {
   subject: string
   markdown: string
   status: CampaignStatus
+  senderId: string | null
   firstBatchSize: number
   createdAt: string
   startedAt: string | null
@@ -67,12 +68,34 @@ export type Contact = {
 }
 
 export type Settings = {
-  fromName: string
-  fromEmail: string
-  replyTo: string
   footer: string
   publicUrl: string
-  webhookSecret: string
+}
+
+export const SENDER_PROVIDERS = ["ses"] as const
+export type SenderProvider = (typeof SENDER_PROVIDERS)[number]
+
+export type Sender = {
+  id: string
+  name: string
+  email: string
+  replyTo: string
+  provider: SenderProvider
+  region: string
+  /** As of the last check: the provider lets this address send. */
+  verified: boolean
+  /** As of the last check: the provider account can email anyone, not just verified addresses. */
+  production: boolean
+  eventsConnected: boolean
+  createdAt: string
+}
+
+/** A DNS record the sender's domain needs. "recommended" ones can't be checked by the provider. */
+export type DnsRecord = {
+  type: "CNAME" | "MX" | "TXT"
+  name: string
+  value: string
+  status: "verified" | "pending" | "recommended"
 }
 
 export type ApiKey = {
@@ -84,7 +107,7 @@ export type ApiKey = {
 }
 
 /** `"Acme, Inc." <hi@acme.com>`: quoted, because a comma in a bare name splits the address. */
-export function senderAddress(sender: { fromName: string; fromEmail: string }) {
-  if (!sender.fromName) return sender.fromEmail
-  return `"${sender.fromName.replace(/["\\]/g, "\\$&")}" <${sender.fromEmail}>`
+export function senderAddress(sender: { name: string; email: string }) {
+  if (!sender.name) return sender.email
+  return `"${sender.name.replace(/["\\]/g, "\\$&")}" <${sender.email}>`
 }
