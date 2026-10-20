@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from "react"
-import { SearchIcon, UsersIcon } from "lucide-react"
+import {
+  CircleAlertIcon,
+  CircleCheckIcon,
+  CircleMinusIcon,
+  CircleXIcon,
+  SearchIcon,
+  UsersIcon,
+  type LucideIcon,
+} from "lucide-react"
 import { Link, useNavigation, useSearchParams } from "react-router"
 import { toast } from "sonner"
 import { cn } from "cn"
@@ -18,6 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -65,11 +74,23 @@ export async function loader({ url }: Route.LoaderArgs) {
   return { ...list, counts, filter, origin: settings.publicUrl || url.origin }
 }
 
-const CONTACT_STATUS: Record<ContactStatus, { label: string; dot: string }> = {
-  subscribed: { label: "Subscribed", dot: "bg-emerald-500" },
-  unsubscribed: { label: "Unsubscribed", dot: "bg-muted-foreground/40" },
-  bounced: { label: "Bounced", dot: "bg-amber-500" },
-  complained: { label: "Complained", dot: "bg-red-500" },
+// Filled icons: the stroke takes the background color, so the mark reads as cut out.
+const CONTACT_STATUS: Record<
+  ContactStatus,
+  { label: string; icon: LucideIcon; fill: string }
+> = {
+  subscribed: {
+    label: "Subscribed",
+    icon: CircleCheckIcon,
+    fill: "fill-emerald-500",
+  },
+  unsubscribed: {
+    label: "Unsubscribed",
+    icon: CircleMinusIcon,
+    fill: "fill-muted-foreground/50",
+  },
+  bounced: { label: "Bounced", icon: CircleAlertIcon, fill: "fill-amber-500" },
+  complained: { label: "Complained", icon: CircleXIcon, fill: "fill-red-500" },
 }
 
 export default function ContactsPage({ loaderData }: Route.ComponentProps) {
@@ -171,9 +192,9 @@ export default function ContactsPage({ loaderData }: Route.ComponentProps) {
           as the table (not the window) gets wider, since the sidebar takes part of the window.
         */}
         <Table className="table-fixed">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="pl-4">Email</TableHead>
+          <TableHeader className="bg-muted/50">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="h-11 pl-4">Email</TableHead>
               <TableHead className="hidden w-36 @3xl:table-cell">
                 Name
               </TableHead>
@@ -191,7 +212,7 @@ export default function ContactsPage({ loaderData }: Route.ComponentProps) {
               </TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
+          <TableBody className="[&_td]:py-3">
             {rows.map((contact) => (
               <ContactRow key={contact.id} contact={contact} />
             ))}
@@ -265,10 +286,13 @@ function ContactRow({ contact }: { contact: Contact }) {
         {contact.externalId}
       </TableCell>
       <TableCell className="hidden @lg:table-cell">
-        <span className="inline-flex items-center gap-1.5 text-sm">
-          <span className={cn("size-1.5 rounded-full", meta.dot)} />
+        <Badge
+          variant="outline"
+          className="gap-1 px-1.5 font-normal text-muted-foreground"
+        >
+          <meta.icon className={cn("size-3.5 text-card", meta.fill)} />
           {meta.label}
-        </span>
+        </Badge>
       </TableCell>
       <TableCell className="hidden text-muted-foreground @2xl:table-cell">
         {formatDate(contact.createdAt)}
