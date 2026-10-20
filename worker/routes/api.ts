@@ -3,7 +3,7 @@ import { csrf } from "hono/csrf"
 import { createMiddleware } from "hono/factory"
 import { z } from "zod"
 
-import { API_KEY_ACCESS, CONTACT_STATUSES, type ApiKeyAccess } from "../../shared/model"
+import { API_KEY_PERMISSIONS, CONTACT_STATUSES, type ApiKeyPermission } from "../../shared/model"
 import { getAdmin, type Admin } from "../auth"
 import { createApiKey, deleteApiKey, findApiKey, listApiKeys, touchApiKey } from "../domain/apiKeys"
 import {
@@ -41,7 +41,7 @@ import { apiDocs } from "./docs"
 import { parseJson, parseQuery } from "./validation"
 
 /** Who is calling: the signed-in admin (the admin app), or an app or agent with an API key. */
-type Caller = { admin: Admin; access: "full" } | { admin: null; access: ApiKeyAccess }
+type Caller = { admin: Admin | null; permissions: ApiKeyPermission[] }
 
 type ApiEnv = { Variables: { caller: Caller } }
 
@@ -51,23 +51,26 @@ const authenticate = createMiddleware<ApiEnv>(async (c, next) => {
     const key = await findApiKey(token)
     if (!key) return c.json({ error: "invalid_api_key", message: "That API key doesn't exist." }, 401)
     await touchApiKey(key.id)
-    c.set("caller", { admin: null, access: key.access })
+    c.set("caller", { admin: null, permissions: key.permissions })
   } else {
     const admin = await getAdmin(c.req.raw)
     if (!admin) return c.json({ error: "unauthorized", message: "Sign in, or send an API key." }, 401)
-    c.set("caller", { admin, access: "full" })
+    c.set("caller", { admin, permissions: ["full"] })
   }
   await next()
 })
 
-/** Allows callers with `access` or full access. "admin" is only the signed-in admin. */
-function requires(access: ApiKeyAccess | "admin") {
+/** Allows callers with `permission` or full access. "admin" is only the signed-in admin. */
+function requires(permission: ApiKeyPermission | "admin") {
   return createMiddleware<ApiEnv>(async (c, next) => {
-    const caller = c.get("caller")
+    const { admin, permissions } = c.get("caller")
     const allowed =
-      access === "admin" ? caller.admin !== null : caller.access === "full" || caller.access === access
+      permission === "admin"
+        ? admin !== null
+        : permissions.includes("full") || permissions.includes(permission)
     if (!allowed) {
-      const needed = access === "admin" ? "a signed-in admin" : `an API key with ${access} access`
+      const needed =
+        permission === "admin" ? "a signed-in admin" : `an API key with the ${permission} permission`
       return c.json({ error: "forbidden", message: `This needs ${needed}.` }, 403)
     }
     await next()
@@ -112,8 +115,8 @@ export const api = new Hono<ApiEnv>()
   .use(csrf())
   .use(authenticate)
   .get("/me", (c) => {
-    const { admin, access } = c.get("caller")
-    return c.json({ access, admin })
+    const { admin, permissions } = c.get("caller")
+    return c.json({ permissions, admin })
   })
 
   // Contacts
@@ -211,11 +214,17 @@ export const api = new Hono<ApiEnv>()
   // API keys stay with the admin, so a leaked key can't mint more.
   .get("/api-keys", requires("admin"), async (c) => c.json({ apiKeys: await listApiKeys() }))
   .post("/api-keys", requires("admin"), async (c) => {
-    const { name, access } = await parseJson(
+    const { name, permissions } = await parseJson(
       c,
-      z.object({ name: z.string().trim().min(1), access: z.enum(API_KEY_ACCESS) })
+      z.object({
+        name: z.string().trim().min(1),
+        permissions: z
+          .array(z.enum(API_KEY_PERMISSIONS))
+          .min(1, "Pick at least one permission.")
+          .transform((list) => [...new Set(list)]),
+      })
     )
-    return c.json({ key: await createApiKey(name, access) })
+    return c.json({ key: await createApiKey(name, permissions) })
   })
   .delete("/api-keys/:id", requires("admin"), async (c) => {
     await deleteApiKey(c.req.param("id"))

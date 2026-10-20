@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test"
 import { exports } from "cloudflare:workers"
 
-import type { ApiKeyAccess, Sender } from "../shared/model"
+import type { ApiKeyPermission, Sender } from "../shared/model"
 import { memoryOutbox } from "../worker/email/providers"
 
 export const ORIGIN = "https://sendr.test"
@@ -94,7 +94,13 @@ export async function webhookSecret() {
 }
 
 /** Creates an API key as the signed-in admin and returns its secret. */
-export async function createApiKey(cookie: string, access: ApiKeyAccess = "contacts") {
-  const response = await request("/api/v1/api-keys", { cookie, json: { name: access, access } })
+export async function createApiKey(
+  cookie: string,
+  permissions: ApiKeyPermission[] = ["contacts"]
+) {
+  const response = await request("/api/v1/api-keys", {
+    cookie,
+    json: { name: permissions.join("+"), permissions },
+  })
   return (await response.json<{ key: string }>()).key
 }

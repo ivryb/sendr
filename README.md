@@ -36,11 +36,13 @@ Each campaign picks its sender in the editor. Instances set up before Senders ex
 
 Everything the admin app does works through the API at `https://emails.example.com/api/v1`, so your app and your agents can use Sendr without the UI. `GET /api/v1/docs` is the full reference, written for agents to read. The **API** page in Sendr has copyable examples and a prompt to hand an agent.
 
-Create keys on the **API** page. Each key has one access level:
+Create keys on the **API** page and tick what each one may do:
 
-- **Contacts**: add, update and remove contacts. For your app's backend.
+- **Contacts**: add, update and remove contacts.
 - **Emails**: send single emails, like receipts and welcome notes.
-- **Full access**: everything, including campaigns, senders and settings. For agents.
+- **Full access**: everything, including campaigns, senders and settings. It covers the other two; give it to agents.
+
+An app's backend usually gets Contacts, Emails or both.
 
 Only the signed-in admin can create or revoke keys.
 

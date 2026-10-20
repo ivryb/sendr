@@ -9,7 +9,7 @@ import {
 } from "drizzle-orm/sqlite-core"
 
 import {
-  API_KEY_ACCESS,
+  type ApiKeyPermission,
   CAMPAIGN_STATUSES,
   CONTACT_STATUSES,
   DELIVERY_STATUSES,
@@ -142,8 +142,11 @@ export const emails = sqliteTable(
 export const apiKeys = sqliteTable("api_keys", {
   id: id(),
   name: text("name").notNull(),
-  // Keys made before access levels existed could only manage contacts.
-  access: text("access", { enum: API_KEY_ACCESS }).notNull().default("contacts"),
+  // Keys made before permissions existed could only manage contacts.
+  permissions: text("permissions", { mode: "json" })
+    .$type<ApiKeyPermission[]>()
+    .notNull()
+    .default(sql`'["contacts"]'`),
   prefix: text("prefix").notNull(),
   hash: text("hash").notNull().unique(),
   createdAt: createdAt(),

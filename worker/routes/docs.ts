@@ -11,15 +11,18 @@ Auth: \`Authorization: Bearer <api key>\`. The admin creates keys in Sendr under
 Bodies and responses are JSON. Errors look like \`{ "error": "code", "message": "readable reason" }\`;
 validation errors add \`issues\` with the field paths.
 
-## Access levels
+## Permissions
 
-Each key has one level. \`GET /me\` returns the caller's.
+Each key has one or more. \`GET /me\` returns the caller's.
 
-- \`contacts\`: read and sync contacts. For an app's backend.
-- \`emails\`: send single emails and read their status. For an app's backend.
-- \`full\`: everything below, including campaigns, senders and settings. For agents.
+- \`contacts\`: read and sync contacts.
+- \`emails\`: send single emails and read their status.
+- \`full\`: everything below, including campaigns, senders and settings. Covers the other two.
 
-## Contacts (contacts access)
+An app's backend usually has \`contacts\`, \`emails\` or both; agents get \`full\`. A missing
+permission returns \`403 forbidden\`.
+
+## Contacts (contacts permission)
 
 Contacts are keyed by your app's user ID (\`externalId\`), so an email change updates the
 same contact. New contacts start subscribed.
@@ -33,7 +36,7 @@ same contact. New contacts start subscribed.
   keeps them opted out.
 - \`GET /contacts?q=&status=&limit=50&offset=0\` lists contacts with \`total\` and per-status \`counts\`.
   Statuses: subscribed, unsubscribed, bounced, complained.
-- \`POST /contacts/{id}/status\` with \`{ "status": "subscribed" | "unsubscribed" }\` (full access, by
+- \`POST /contacts/{id}/status\` with \`{ "status": "subscribed" | "unsubscribed" }\` (full permission, by
   Sendr's contact \`id\`). Resubscribe only people who asked.
 
 Example:
@@ -44,7 +47,7 @@ curl -X PUT ${api}/contacts/user_123 \\
   -d '{"email": "ada@example.com", "firstName": "Ada", "fields": {"plan": "pro"}}'
 \`\`\`
 
-## Single emails (emails access)
+## Single emails (emails permission)
 
 For receipts, welcome notes and other one-off emails. They go out right away, without the
 campaign footer or an unsubscribe link. Addresses that bounced or complained before are
@@ -67,7 +70,7 @@ curl -X POST ${api}/emails \\
   -d '{"from": "hello@example.com", "to": "ada@example.com", "subject": "Welcome", "markdown": "Hi Ada, thanks for signing up."}'
 \`\`\`
 
-## Campaigns (full access)
+## Campaigns (full permission)
 
 A campaign is Markdown sent to every subscribed contact. Merge tags fill in contact data with a
 fallback: \`{{first_name|there}}\`, \`{{fields.plan|free}}\`. Starting a campaign sends it to the
@@ -86,7 +89,7 @@ Statuses: draft, first_batch, awaiting_approval, sending, sent, cancelled.
 
 The footer under every campaign (with the sender's postal address) is \`footer\` in settings.
 
-## Senders (full access)
+## Senders (full permission)
 
 A sender is a From address and the Amazon SES account that sends for it.
 
@@ -98,7 +101,7 @@ A sender is a From address and the Amazon SES account that sends for it.
   whether the SES account has \`production\` access.
 - \`PATCH /senders/{id}\` with \`{ "name"?, "replyTo"? }\`. \`DELETE /senders/{id}\`.
 
-## Settings (full access)
+## Settings (full permission)
 
 - \`GET /settings\`, \`PUT /settings\` with \`{ "footer"?, "publicUrl"? }\`. \`footer\` is Markdown.
 `

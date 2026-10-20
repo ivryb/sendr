@@ -32,7 +32,7 @@ const sendEmail = (key: string, body: Record<string, unknown>) =>
 
 describe("access levels", () => {
   it("a contacts key syncs contacts and nothing else", async () => {
-    const key = await createApiKey(admin, "contacts")
+    const key = await createApiKey(admin, ["contacts"])
     const upsert = await request("/api/v1/contacts/u1", {
       method: "PUT",
       bearer: key,
@@ -47,7 +47,7 @@ describe("access levels", () => {
 
   it("an emails key sends emails but can't touch contacts", async () => {
     await addSender(admin)
-    const key = await createApiKey(admin, "emails")
+    const key = await createApiKey(admin, ["emails"])
     expect((await sendEmail(key, { markdown: "Hi" })).status).toBe(200)
     const upsert = await request("/api/v1/contacts/u1", {
       method: "PUT",
@@ -59,7 +59,7 @@ describe("access levels", () => {
 
   it("a full key runs a campaign end to end, but can't mint more keys", async () => {
     await addSender(admin)
-    const key = await createApiKey(admin, "full")
+    const key = await createApiKey(admin, ["full"])
     await request("/api/v1/contacts/u1", {
       method: "PUT",
       bearer: key,
@@ -85,14 +85,14 @@ describe("access levels", () => {
 
     const minted = await request("/api/v1/api-keys", {
       bearer: key,
-      json: { name: "another", access: "full" },
+      json: { name: "another", permissions: ["full"] },
     })
     expect(minted.status).toBe(403)
   })
 
   it("a test send through the API says who gets it", async () => {
     await addSender(admin)
-    const key = await createApiKey(admin, "full")
+    const key = await createApiKey(admin, ["full"])
     const created = await request("/api/v1/campaigns", {
       bearer: key,
       json: { subject: "News", markdown: "Hi" },
@@ -119,7 +119,7 @@ describe("single emails", () => {
 
   beforeEach(async () => {
     await addSender(admin)
-    key = await createApiKey(admin, "emails")
+    key = await createApiKey(admin, ["emails"])
   })
 
   it("sends from a sender without the campaign footer or unsubscribe link", async () => {
@@ -198,13 +198,13 @@ describe("safety", () => {
   })
 
   it("answers a bad query with 400, not a crash", async () => {
-    const key = await createApiKey(admin, "contacts")
+    const key = await createApiKey(admin, ["contacts"])
     const response = await request("/api/v1/contacts?limit=0", { bearer: key })
     expect(response.status).toBe(400)
   })
 
   it("a deleted user who unsubscribed stays unsubscribed when added back", async () => {
-    const key = await createApiKey(admin, "contacts")
+    const key = await createApiKey(admin, ["contacts"])
     const put = (externalId: string, body: Record<string, unknown>) =>
       request(`/api/v1/contacts/${externalId}`, {
         method: "PUT",
@@ -226,11 +226,36 @@ describe("safety", () => {
 
   it("finds a sender by address whatever its case", async () => {
     await addSender(admin, { email: "Hello@Example.com" })
-    const key = await createApiKey(admin, "emails")
+    const key = await createApiKey(admin, ["emails"])
     const response = await sendEmail(key, {
       from: "hello@example.com",
       markdown: "Hi",
     })
     expect(response.status).toBe(200)
+  })
+})
+
+describe("combined permissions", () => {
+  it("one key can sync contacts and send emails, without full access", async () => {
+    await addSender(admin)
+    const key = await createApiKey(admin, ["contacts", "emails"])
+    const upsert = await request("/api/v1/contacts/u1", {
+      method: "PUT",
+      bearer: key,
+      json: { email: "bob@example.com" },
+    })
+    expect(upsert.status).toBe(200)
+    expect((await sendEmail(key, { markdown: "Hi" })).status).toBe(200)
+    expect((await request("/api/v1/campaigns", { bearer: key })).status).toBe(
+      403
+    )
+  })
+
+  it("a key needs at least one permission", async () => {
+    const response = await request("/api/v1/api-keys", {
+      cookie: admin,
+      json: { name: "empty", permissions: [] },
+    })
+    expect(response.status).toBe(400)
   })
 })

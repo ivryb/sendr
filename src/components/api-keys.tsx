@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react"
-import { CheckIcon, KeyRoundIcon, PlusIcon } from "lucide-react"
+import { KeyRoundIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -31,15 +32,18 @@ import { api } from "@/lib/api"
 import { useDates } from "@/lib/format"
 import { useChange } from "@/lib/mutations"
 import {
-  API_KEY_ACCESS,
+  API_KEY_PERMISSIONS,
   type ApiKey,
-  type ApiKeyAccess,
+  type ApiKeyPermission,
 } from "../../shared/model"
 
-const ACCESS: Record<ApiKeyAccess, { label: string; description: string }> = {
+const PERMISSIONS: Record<
+  ApiKeyPermission,
+  { label: string; description: string }
+> = {
   contacts: {
     label: "Contacts",
-    description: "Add, update and remove contacts. For your app's backend.",
+    description: "Add, update and remove contacts.",
   },
   emails: {
     label: "Emails",
@@ -88,7 +92,7 @@ function ApiKeyRow({ apiKey }: { apiKey: ApiKey }) {
             variant="outline"
             className="font-normal text-muted-foreground"
           >
-            {ACCESS[apiKey.access].label}
+            {permissionsLabel(apiKey.permissions)}
           </Badge>
         </span>
         <span className="truncate text-xs text-muted-foreground">
@@ -126,12 +130,36 @@ function ApiKeyRow({ apiKey }: { apiKey: ApiKey }) {
   )
 }
 
+/** "Contacts, Emails", or "Full access", which covers the rest. */
+function permissionsLabel(permissions: ApiKeyPermission[]) {
+  if (permissions.includes("full")) return PERMISSIONS.full.label
+  return permissions
+    .map((permission) => PERMISSIONS[permission].label)
+    .join(", ")
+}
+
 function CreateKeyDialog() {
   const [open, setOpen] = useState(false)
-  const [access, setAccess] = useState<ApiKeyAccess>("contacts")
+  const [permissions, setPermissions] = useState<ApiKeyPermission[]>([
+    "contacts",
+  ])
+  const full = permissions.includes("full")
+  // Full access covers the others, so they show as checked and can't be changed.
+  const toggle = (permission: ApiKeyPermission, checked: boolean) =>
+    setPermissions((current) =>
+      permission === "full"
+        ? checked
+          ? ["full"]
+          : []
+        : checked
+          ? [...current, permission]
+          : current.filter((item) => item !== permission)
+    )
   const create = useChange({
     mutationFn: (name: string) =>
-      api<{ key: string }>("/api/v1/api-keys", { body: { name, access } }),
+      api<{ key: string }>("/api/v1/api-keys", {
+        body: { name, permissions },
+      }),
   })
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -170,7 +198,7 @@ function CreateKeyDialog() {
             <DialogHeader>
               <DialogTitle>Create an API key</DialogTitle>
               <DialogDescription>
-                Make one per app or agent, with only the access it needs.
+                Make one per app or agent, with only the permissions it needs.
               </DialogDescription>
             </DialogHeader>
             <Field>
@@ -183,38 +211,47 @@ function CreateKeyDialog() {
                 placeholder="Acme web app"
               />
             </Field>
-            <div
-              role="radiogroup"
-              aria-label="Access"
-              className="flex flex-col gap-2"
-            >
-              <span className="text-sm font-medium">Access</span>
-              {API_KEY_ACCESS.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={access === value}
-                  onClick={() => setAccess(value)}
-                  className={cn(
-                    "flex items-start gap-3 rounded-lg px-3 py-2.5 text-left ring-1 ring-foreground/10 transition-colors hover:bg-muted/50",
-                    access === value && "ring-2 ring-primary"
-                  )}
-                >
-                  <span className="flex flex-1 flex-col gap-0.5">
-                    <span className="text-sm font-medium">
-                      {ACCESS[value].label}
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-2 text-sm font-medium">Permissions</legend>
+              {API_KEY_PERMISSIONS.map((permission) => {
+                const covered = full && permission !== "full"
+                return (
+                  <label
+                    key={permission}
+                    className={cn(
+                      "flex items-start gap-3 rounded-lg px-3 py-2.5 ring-1 ring-foreground/10 transition-colors has-[[data-checked]]:bg-muted/40",
+                      covered
+                        ? "opacity-60"
+                        : "cursor-pointer hover:bg-muted/50"
+                    )}
+                  >
+                    <Checkbox
+                      checked={covered || permissions.includes(permission)}
+                      disabled={covered}
+                      onCheckedChange={(checked) => toggle(permission, checked)}
+                      className="mt-0.5"
+                    />
+                    <span className="flex flex-1 flex-col gap-0.5">
+                      <span className="text-sm font-medium">
+                        {PERMISSIONS[permission].label}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {PERMISSIONS[permission].description}
+                      </span>
                     </span>
-                    <span className="text-xs text-muted-foreground">
-                      {ACCESS[value].description}
-                    </span>
-                  </span>
-                  {access === value && <CheckIcon className="mt-0.5 size-4" />}
-                </button>
-              ))}
-            </div>
+                  </label>
+                )
+              })}
+              <p className="pt-1 text-xs text-muted-foreground">
+                An app's backend usually needs Contacts, Emails or both. Give
+                Full access only to agents you trust to run campaigns.
+              </p>
+            </fieldset>
             <DialogFooter>
-              <Button type="submit" disabled={create.isPending}>
+              <Button
+                type="submit"
+                disabled={create.isPending || permissions.length === 0}
+              >
                 {create.isPending && <Spinner />}
                 Create key
               </Button>

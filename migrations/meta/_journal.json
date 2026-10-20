@@ -29,6 +29,13 @@
       "when": 1792469359224,
       "tag": "0003_api_access_and_emails",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792472657939,
+      "tag": "0004_api_key_permissions",
+      "breakpoints": true
     }
   ]
 }

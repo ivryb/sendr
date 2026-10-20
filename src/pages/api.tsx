@@ -39,7 +39,7 @@ export default function ApiPage({ loaderData }: Route.ComponentProps) {
 
       <Section
         title="Keys"
-        description="Make one per app or agent, with only the access it needs, so you can revoke them separately."
+        description="Make one per app or agent, with only the permissions it needs, so you can revoke them separately."
       >
         <ApiKeys apiKeys={apiKeys} />
       </Section>

@@ -113,16 +113,16 @@ export type DnsRecord = {
 }
 
 /**
- * What an API key may do. "contacts" and "emails" suit an app's backend; "full" is everything
- * the admin can do, for agents.
+ * What an API key may do. An app's backend usually needs "contacts", "emails" or both; "full"
+ * is everything the admin can do, for agents, and covers the other two.
  */
-export const API_KEY_ACCESS = ["contacts", "emails", "full"] as const
-export type ApiKeyAccess = (typeof API_KEY_ACCESS)[number]
+export const API_KEY_PERMISSIONS = ["contacts", "emails", "full"] as const
+export type ApiKeyPermission = (typeof API_KEY_PERMISSIONS)[number]
 
 export type ApiKey = {
   id: string
   name: string
-  access: ApiKeyAccess
+  permissions: ApiKeyPermission[]
   prefix: string
   createdAt: string
   lastUsedAt: string | null
