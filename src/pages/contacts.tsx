@@ -216,18 +216,14 @@ export default function ContactsPage({ loaderData }: Route.ComponentProps) {
             {rows.map((contact) => (
               <ContactRow key={contact.id} contact={contact} />
             ))}
-            {rows.length === 0 && (
-              <TableRow>
-                <TableCell
-                  colSpan={6}
-                  className="py-10 text-center text-muted-foreground"
-                >
-                  No contacts match.
-                </TableCell>
-              </TableRow>
-            )}
           </TableBody>
         </Table>
+        {/* Outside the table: a spanning cell would count columns hidden at this width. */}
+        {rows.length === 0 && (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            No contacts match.
+          </p>
+        )}
       </div>
 
       {total > PAGE_SIZE && (
