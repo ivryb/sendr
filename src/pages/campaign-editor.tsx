@@ -69,10 +69,10 @@ export function CampaignEditor({
 }) {
   const campaignSave = useAutosave(
     pickDraft(campaign),
-    `/api/admin/campaigns/${campaign.id}`
+    `/api/v1/campaigns/${campaign.id}`
   )
   // The footer is shared by every campaign, so it saves to the instance's settings.
-  const footerSave = useAutosave({ footer }, "/api/admin/settings")
+  const footerSave = useAutosave({ footer }, "/api/v1/settings")
   const saves = [campaignSave, footerSave]
   const flush = async () => {
     await Promise.all(saves.map((save) => save.flush()))
@@ -426,7 +426,7 @@ function SendTestButton({
   const send = useMutation({
     mutationFn: async () => {
       await flush()
-      await api(`/api/admin/campaigns/${id}/test`, { body: {} })
+      await api(`/api/v1/campaigns/${id}/test`, { body: {} })
     },
     onSuccess: () => toast.success(`Test sent to ${me.email}`),
   })
@@ -459,7 +459,7 @@ function StartButton({
     mutationFn: async () => {
       await flush()
       return api<{ campaign: Campaign }>(
-        `/api/admin/campaigns/${campaign.id}/start`,
+        `/api/v1/campaigns/${campaign.id}/start`,
         { body: {} }
       )
     },
@@ -518,7 +518,7 @@ function DraftMenu({ id }: { id: string }) {
   const navigate = useNavigate()
   const [confirming, setConfirming] = useState(false)
   const remove = useMutation({
-    mutationFn: () => api(`/api/admin/campaigns/${id}`, { method: "DELETE" }),
+    mutationFn: () => api(`/api/v1/campaigns/${id}`, { method: "DELETE" }),
     onSuccess: async () => {
       await navigate("/campaigns")
       toast.success("Draft deleted")

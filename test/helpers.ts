@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test"
 import { exports } from "cloudflare:workers"
 
-import type { Sender } from "../shared/model"
+import type { ApiKeyAccess, Sender } from "../shared/model"
 import { memoryOutbox } from "../worker/email/providers"
 
 export const ORIGIN = "https://sendr.test"
@@ -78,11 +78,11 @@ export const SENDER = {
 
 /** Connects a sender through the API, against the fake AWS in test/fake-aws.ts. */
 export async function addSender(cookie: string, input: Partial<typeof SENDER> = {}) {
-  const response = await request("/api/admin/senders", { cookie, json: { ...SENDER, ...input } })
+  const response = await request("/api/v1/senders", { cookie, json: { ...SENDER, ...input } })
   if (!response.ok) throw new Error(`adding a sender failed: ${await response.text()}`)
   const { sender } = await response.json<{ sender: Sender }>()
   // Verification is read on check, as the sender page does.
-  await request(`/api/admin/senders/${sender.id}`, { cookie })
+  await request(`/api/v1/senders/${sender.id}`, { cookie })
   return sender
 }
 
@@ -91,4 +91,10 @@ export async function webhookSecret() {
     secret: string
   }>()
   return row!.secret
+}
+
+/** Creates an API key as the signed-in admin and returns its secret. */
+export async function createApiKey(cookie: string, access: ApiKeyAccess = "contacts") {
+  const response = await request("/api/v1/api-keys", { cookie, json: { name: access, access } })
+  return (await response.json<{ key: string }>()).key
 }

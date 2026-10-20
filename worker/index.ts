@@ -3,37 +3,26 @@ import { createRequestHandler } from "react-router"
 import { HTTPException } from "hono/http-exception"
 
 import { createAuth, isClaimed } from "./auth"
-import { CampaignError, type SendMessage } from "./domain/campaigns"
-import { SenderError } from "./domain/senders"
+import type { SendMessage } from "./domain/campaigns"
 import { processSendMessage } from "./domain/sending"
+import { DomainError } from "./lib/errors"
 import { getSettings } from "./lib/settings"
-import { adminApi } from "./routes/admin"
+import { api } from "./routes/api"
 import { hooks } from "./routes/hooks"
-import { publicApi } from "./routes/publicApi"
 import { unsubscribe } from "./routes/unsubscribe"
-
-const CAMPAIGN_ERROR_STATUS = { not_found: 404, invalid_action: 409, not_ready: 400 } as const
-const SENDER_ERROR_STATUS = { not_found: 404, invalid: 400 } as const
 
 const app = new Hono<{ Bindings: Env }>()
   .on(["GET", "POST"], "/api/auth/*", async (c) =>
     createAuth(await getSettings(), c.req.url).handler(c.req.raw)
   )
   .get("/api/setup", async (c) => c.json({ claimed: await isClaimed() }))
-  .route("/api/admin", adminApi)
-  .route("/api/v1", publicApi)
+  .route("/api/v1", api)
   .route("/hooks", hooks)
   .route("/u", unsubscribe)
   .onError((error, c) => {
     if (error instanceof HTTPException) return error.getResponse()
-    if (error instanceof CampaignError) {
-      return c.json(
-        { error: error.code, message: error.message },
-        CAMPAIGN_ERROR_STATUS[error.code]
-      )
-    }
-    if (error instanceof SenderError) {
-      return c.json({ error: error.code, message: error.message }, SENDER_ERROR_STATUS[error.code])
+    if (error instanceof DomainError) {
+      return c.json({ error: error.code, message: error.message }, error.status)
     }
     console.error(error)
     return c.json({ error: "internal_error" }, 500)

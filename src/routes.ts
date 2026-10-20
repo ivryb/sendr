@@ -16,6 +16,7 @@ export default [
       route("senders", "pages/senders.tsx"),
       route("senders/new", "pages/sender-new.tsx"),
       route("senders/:id", "pages/sender.tsx"),
+      route("api", "pages/api.tsx"),
       route("settings", "pages/settings.tsx"),
       route("*", "pages/home.ts", { id: "not-found" }),
     ]),

@@ -2,7 +2,14 @@ import { beforeEach, describe, expect, it } from "vitest"
 
 import type { DnsRecord, Sender } from "../shared/model"
 import { fakeAws, TOPIC_ARN } from "./fake-aws"
-import { addSender, request, SENDER, signInAsAdmin, webhookSecret } from "./helpers"
+import {
+  addSender,
+  createApiKey,
+  request,
+  SENDER,
+  signInAsAdmin,
+  webhookSecret,
+} from "./helpers"
 
 let admin: string
 
@@ -15,7 +22,7 @@ type Check =
   | { ok: false; sender: Sender; error: string }
 
 async function check(id: string) {
-  return (await request(`/api/admin/senders/${id}`, { cookie: admin })).json<Check>()
+  return (await request(`/api/v1/senders/${id}`, { cookie: admin })).json<Check>()
 }
 
 describe("connecting a sender", () => {
@@ -56,17 +63,17 @@ describe("connecting a sender", () => {
 
   it("explains a key AWS rejects, and saves nothing", async () => {
     fakeAws.rejectKey = true
-    const response = await request("/api/admin/senders", { cookie: admin, json: SENDER })
+    const response = await request("/api/v1/senders", { cookie: admin, json: SENDER })
     expect(response.status).toBe(400)
     expect(await response.json()).toMatchObject({
       message: "AWS didn't accept this access key. Check both parts and the region.",
     })
-    const list = await request("/api/admin/senders", { cookie: admin })
+    const list = await request("/api/v1/senders", { cookie: admin })
     expect(await list.json()).toEqual({ senders: [] })
   })
 
   it("isn't open to signed-out visitors", async () => {
-    const response = await request("/api/admin/senders", { json: SENDER })
+    const response = await request("/api/v1/senders", { json: SENDER })
     expect(response.status).toBe(401)
   })
 })
@@ -94,27 +101,23 @@ describe("delivery reports", () => {
 describe("removing a sender", () => {
   it("waits until its campaigns finish sending", async () => {
     const sender = await addSender(admin)
-    const apiKey = (
-      await (await request("/api/admin/api-keys", { cookie: admin, json: { name: "t" } })).json<{
-        key: string
-      }>()
-    ).key
+    const apiKey = await createApiKey(admin)
     await request("/api/v1/contacts/batch", {
       bearer: apiKey,
       json: { contacts: [{ externalId: "u1", email: "ann@example.com" }] },
     })
-    const created = await request("/api/admin/campaigns", {
+    const created = await request("/api/v1/campaigns", {
       cookie: admin,
       json: { subject: "Hi", markdown: "Hello" },
     })
     const { campaign } = await created.json<{ campaign: { id: string } }>()
-    await request(`/api/admin/campaigns/${campaign.id}/start`, { cookie: admin, json: {} })
+    await request(`/api/v1/campaigns/${campaign.id}/start`, { cookie: admin, json: {} })
 
-    const blocked = await request(`/api/admin/senders/${sender.id}`, { method: "DELETE", cookie: admin })
+    const blocked = await request(`/api/v1/senders/${sender.id}`, { method: "DELETE", cookie: admin })
     expect(blocked.status).toBe(400)
 
-    await request(`/api/admin/campaigns/${campaign.id}/cancel`, { cookie: admin, json: {} })
-    const removed = await request(`/api/admin/senders/${sender.id}`, { method: "DELETE", cookie: admin })
+    await request(`/api/v1/campaigns/${campaign.id}/cancel`, { cookie: admin, json: {} })
+    const removed = await request(`/api/v1/senders/${sender.id}`, { method: "DELETE", cookie: admin })
     expect(removed.status).toBe(200)
   })
 })

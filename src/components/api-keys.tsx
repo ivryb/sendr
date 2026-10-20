@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from "react"
-import { KeyRoundIcon, PlusIcon } from "lucide-react"
+import { CheckIcon, KeyRoundIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
+import { cn } from "cn"
 
 import { CopyField } from "@/components/copy-button"
-import { SettingsSection } from "@/components/settings-section"
+import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,25 +30,40 @@ import { Spinner } from "@/components/ui/spinner"
 import { api } from "@/lib/api"
 import { useDates } from "@/lib/format"
 import { useChange } from "@/lib/mutations"
-import type { ApiKey } from "../../shared/model"
+import {
+  API_KEY_ACCESS,
+  type ApiKey,
+  type ApiKeyAccess,
+} from "../../shared/model"
 
-export function ApiKeysSection({ apiKeys }: { apiKeys: ApiKey[] }) {
+const ACCESS: Record<ApiKeyAccess, { label: string; description: string }> = {
+  contacts: {
+    label: "Contacts",
+    description: "Add, update and remove contacts. For your app's backend.",
+  },
+  emails: {
+    label: "Emails",
+    description: "Send single emails, like receipts and welcome notes.",
+  },
+  full: {
+    label: "Full access",
+    description:
+      "Everything, including campaigns, senders and settings. For agents.",
+  },
+}
+
+export function ApiKeys({ apiKeys }: { apiKeys: ApiKey[] }) {
   return (
-    <SettingsSection
-      title="API keys"
-      description="Your app uses a key to add, update and remove contacts. Make one per app so you can revoke them separately."
-    >
-      <div className="flex flex-col gap-4">
-        {apiKeys.length > 0 && (
-          <ul className="divide-y rounded-xl bg-card ring-1 ring-foreground/10">
-            {apiKeys.map((key) => (
-              <ApiKeyRow key={key.id} apiKey={key} />
-            ))}
-          </ul>
-        )}
-        <CreateKeyDialog />
-      </div>
-    </SettingsSection>
+    <div className="flex flex-col gap-4">
+      {apiKeys.length > 0 && (
+        <ul className="divide-y rounded-xl bg-card ring-1 ring-foreground/10">
+          {apiKeys.map((key) => (
+            <ApiKeyRow key={key.id} apiKey={key} />
+          ))}
+        </ul>
+      )}
+      <CreateKeyDialog />
+    </div>
   )
 }
 
@@ -56,7 +72,7 @@ function ApiKeyRow({ apiKey }: { apiKey: ApiKey }) {
   const [open, setOpen] = useState(false)
   const revoke = useChange({
     mutationFn: () =>
-      api(`/api/admin/api-keys/${apiKey.id}`, { method: "DELETE" }),
+      api(`/api/v1/api-keys/${apiKey.id}`, { method: "DELETE" }),
     onSuccess: () => {
       setOpen(false)
       toast.success(`${apiKey.name} revoked`)
@@ -66,7 +82,15 @@ function ApiKeyRow({ apiKey }: { apiKey: ApiKey }) {
     <li className="flex items-center gap-3 px-4 py-3">
       <KeyRoundIcon className="size-4 shrink-0 text-muted-foreground" />
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-medium">{apiKey.name}</span>
+        <span className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium">{apiKey.name}</span>
+          <Badge
+            variant="outline"
+            className="font-normal text-muted-foreground"
+          >
+            {ACCESS[apiKey.access].label}
+          </Badge>
+        </span>
         <span className="truncate text-xs text-muted-foreground">
           <code className="font-mono">{apiKey.prefix}…</code>{" "}
           {apiKey.lastUsedAt
@@ -82,7 +106,7 @@ function ApiKeyRow({ apiKey }: { apiKey: ApiKey }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Revoke {apiKey.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Apps using this key stop syncing contacts right away.
+              Anything using this key stops working right away.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -104,9 +128,10 @@ function ApiKeyRow({ apiKey }: { apiKey: ApiKey }) {
 
 function CreateKeyDialog() {
   const [open, setOpen] = useState(false)
+  const [access, setAccess] = useState<ApiKeyAccess>("contacts")
   const create = useChange({
     mutationFn: (name: string) =>
-      api<{ key: string }>("/api/admin/api-keys", { body: { name } }),
+      api<{ key: string }>("/api/v1/api-keys", { body: { name, access } }),
   })
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -131,7 +156,8 @@ function CreateKeyDialog() {
             <DialogHeader>
               <DialogTitle>Copy your new key</DialogTitle>
               <DialogDescription>
-                Store it in your app's secrets now. It won't be shown again.
+                Store it with the app or agent that uses it now. It won't be
+                shown again.
               </DialogDescription>
             </DialogHeader>
             <CopyField value={create.data.key} />
@@ -144,7 +170,7 @@ function CreateKeyDialog() {
             <DialogHeader>
               <DialogTitle>Create an API key</DialogTitle>
               <DialogDescription>
-                Name it after the app that will use it.
+                Make one per app or agent, with only the access it needs.
               </DialogDescription>
             </DialogHeader>
             <Field>
@@ -157,6 +183,36 @@ function CreateKeyDialog() {
                 placeholder="Acme web app"
               />
             </Field>
+            <div
+              role="radiogroup"
+              aria-label="Access"
+              className="flex flex-col gap-2"
+            >
+              <span className="text-sm font-medium">Access</span>
+              {API_KEY_ACCESS.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={access === value}
+                  onClick={() => setAccess(value)}
+                  className={cn(
+                    "flex items-start gap-3 rounded-lg px-3 py-2.5 text-left ring-1 ring-foreground/10 transition-colors hover:bg-muted/50",
+                    access === value && "ring-2 ring-primary"
+                  )}
+                >
+                  <span className="flex flex-1 flex-col gap-0.5">
+                    <span className="text-sm font-medium">
+                      {ACCESS[value].label}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {ACCESS[value].description}
+                    </span>
+                  </span>
+                  {access === value && <CheckIcon className="mt-0.5 size-4" />}
+                </button>
+              ))}
+            </div>
             <DialogFooter>
               <Button type="submit" disabled={create.isPending}>
                 {create.isPending && <Spinner />}

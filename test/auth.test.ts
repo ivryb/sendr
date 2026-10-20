@@ -34,7 +34,7 @@ describe("first sign-in", () => {
 
   it("the first sign-in sets the public URL used in unsubscribe links", async () => {
     const admin = await signInAsAdmin()
-    const settings = await request("/api/admin/settings", { cookie: admin })
+    const settings = await request("/api/v1/settings", { cookie: admin })
     expect((await settings.json<{ publicUrl: string }>()).publicUrl).toBe("https://sendr.test")
   })
 

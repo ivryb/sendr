@@ -71,7 +71,7 @@ function useCreateCampaign() {
   const navigate = useNavigate()
   return useMutation({
     mutationFn: () =>
-      api<{ campaign: Campaign }>("/api/admin/campaigns", { body: {} }),
+      api<{ campaign: Campaign }>("/api/v1/campaigns", { body: {} }),
     onSuccess: ({ campaign }) => navigate(`/campaigns/${campaign.id}`),
   })
 }

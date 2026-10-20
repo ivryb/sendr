@@ -2,7 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { Campaign, Contact } from "../shared/model"
 import { TOPIC_ARN } from "./fake-aws"
-import { addSender, request, sentEmails, signInAsAdmin, webhookSecret } from "./helpers"
+import {
+  addSender,
+  createApiKey,
+  request,
+  sentEmails,
+  signInAsAdmin,
+  webhookSecret,
+} from "./helpers"
 
 let admin: string
 let apiKey: string
@@ -10,8 +17,7 @@ let apiKey: string
 beforeEach(async () => {
   admin = await signInAsAdmin()
   await addSender(admin)
-  const created = await request("/api/admin/api-keys", { cookie: admin, json: { name: "t" } })
-  apiKey = (await created.json<{ key: string }>()).key
+  apiKey = await createApiKey(admin)
   await request("/api/v1/contacts/batch", {
     bearer: apiKey,
     json: {
@@ -24,12 +30,12 @@ beforeEach(async () => {
 })
 
 async function sendCampaign() {
-  const created = await request("/api/admin/campaigns", {
+  const created = await request("/api/v1/campaigns", {
     cookie: admin,
     json: { subject: "Hello", markdown: "Body" },
   })
   const { campaign } = await created.json<{ campaign: Campaign }>()
-  await request(`/api/admin/campaigns/${campaign.id}/start`, { cookie: admin, json: {} })
+  await request(`/api/v1/campaigns/${campaign.id}/start`, { cookie: admin, json: {} })
   await vi.waitUntil(async () => (await getCampaign(campaign.id)).status === "sent", {
     timeout: 10_000,
     interval: 50,
@@ -38,12 +44,12 @@ async function sendCampaign() {
 }
 
 async function getCampaign(id: string) {
-  const response = await request(`/api/admin/campaigns/${id}`, { cookie: admin })
+  const response = await request(`/api/v1/campaigns/${id}`, { cookie: admin })
   return (await response.json<{ campaign: Campaign }>()).campaign
 }
 
 async function contactStatus(email: string) {
-  const response = await request(`/api/admin/contacts?q=${email}`, { cookie: admin })
+  const response = await request(`/api/v1/contacts?q=${email}`, { cookie: admin })
   return (await response.json<{ contacts: Contact[] }>()).contacts[0].status
 }
 

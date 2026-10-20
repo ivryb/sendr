@@ -17,7 +17,7 @@ Sendr is single-tenant: one deployment is one contact list, sent to from one or 
 1. Click **Deploy to Cloudflare** above. Cloudflare copies this repo into your GitHub account, creates the D1 database and queue, and asks for `ADMIN_EMAIL`: your email. You sign in with it; nobody else can.
 2. Add a custom domain to the Worker (Workers & Pages > sendr > Settings > Domains & Routes), for example `emails.example.com`. Unsubscribe links use it, so pick one you'll keep. Sign in on this domain, not on `workers.dev`: passkeys only work on the domain they were created on, and the first sign-in saves it as the address for unsubscribe links.
 3. Open the domain and sign in with your email. Until Sendr can send email itself, sendr.soy delivers your login code (see [Login codes](#login-codes)). Add a passkey when asked.
-4. Add a sender in **Senders** (below), then create an API key in **Settings** and push your contacts.
+4. Add a sender in **Senders** (below), then create an API key on the **API** page and push your contacts.
 
 To deploy by hand instead: clone the repo, `bun install`, `bunx wrangler queues create sendr-send`, then `bun run deploy -- --domain emails.example.com`. The first deploy creates the D1 database and applies migrations. Then set your email with `bunx wrangler secret put ADMIN_EMAIL`.
 
@@ -32,9 +32,21 @@ A sender is an address your campaigns come from, like `news@acme.com`, and the e
 
 Each campaign picks its sender in the editor. Instances set up before Senders existed need a sender added this way; their drafts then pick it. To check bounce handling, add `bounce@simulator.amazonses.com` as a contact and send it a campaign; it should show up as bounced.
 
-## Push contacts from your app
+## API
 
-Create an API key in **Settings**. Contacts are keyed by your app's user ID, so an email change updates the same contact.
+Everything the admin app does works through the API at `https://emails.example.com/api/v1`, so your app and your agents can use Sendr without the UI. `GET /api/v1/docs` is the full reference, written for agents to read. The **API** page in Sendr has copyable examples and a prompt to hand an agent.
+
+Create keys on the **API** page. Each key has one access level:
+
+- **Contacts**: add, update and remove contacts. For your app's backend.
+- **Emails**: send single emails, like receipts and welcome notes.
+- **Full access**: everything, including campaigns, senders and settings. For agents.
+
+Only the signed-in admin can create or revoke keys.
+
+### Push contacts from your app
+
+Contacts are keyed by your app's user ID, so an email change updates the same contact.
 
 ```sh
 # Add or update one contact
@@ -54,6 +66,16 @@ curl -X DELETE https://emails.example.com/api/v1/contacts/user_123 -H "Authoriza
 - New contacts start subscribed. Pass `"unsubscribed": true` to import someone who already opted out.
 - The API can unsubscribe a contact but never resubscribes one. Only the recipient (from the unsubscribe page) or an admin can.
 - An email that already belongs to another user ID is rejected with `409`. Every call is safe to repeat, so rerunning a full backfill repairs any drift.
+
+### Send single emails
+
+```sh
+curl -X POST https://emails.example.com/api/v1/emails \
+  -H "Authorization: Bearer sk_..." -H "Content-Type: application/json" \
+  -d '{ "from": "hello@example.com", "to": "ann@example.com", "subject": "Welcome", "markdown": "Thanks for signing up." }'
+```
+
+`from` is one of your verified senders. Single emails go out right away, without the campaign footer or an unsubscribe link. Addresses that bounced or reported spam before are refused. `GET /api/v1/emails/{id}` shows whether it was delivered.
 
 ## Writing campaigns
 
@@ -86,7 +108,7 @@ bun run typecheck
 
 Copy `.dev.vars.example` to `.dev.vars`. It sets `EMAIL_PROVIDER=memory` and an empty `LOGIN_CODE_RELAY_URL`, so emails, including login codes, are printed to the dev server log instead of being sent. After changing `worker/db/schema.ts`, run `bun run db:generate` to create a migration.
 
-The Worker lives in `worker/` (Hono routes, domain logic, providers). The admin app in `src/` is a React Router app: each page in `src/pages/` loads its data on the server in a `loader` and saves through the admin API. Its routes are listed in `src/routes.ts`. Code both use (the domain model and the email renderer) lives in `shared/`. `site/` is the sendr.soy Worker, run by the Sendr project rather than by each instance. A new email service needs an `EmailProvider` adapter in `worker/email/`, plus its setup and checks in `worker/domain/senders.ts`.
+The Worker lives in `worker/` (Hono routes, domain logic, providers). The admin app in `src/` is a React Router app: each page in `src/pages/` loads its data on the server in a `loader` and saves through the same `/api/v1` API that apps and agents use (`worker/routes/api.ts`). Its routes are listed in `src/routes.ts`. Code both use (the domain model and the email renderer) lives in `shared/`. `site/` is the sendr.soy Worker, run by the Sendr project rather than by each instance. A new email service needs an `EmailProvider` adapter in `worker/email/`, plus its setup and checks in `worker/domain/senders.ts`.
 
 ## License
 

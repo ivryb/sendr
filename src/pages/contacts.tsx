@@ -304,7 +304,7 @@ function StatusAction({ contact }: { contact: Contact }) {
   const [confirming, setConfirming] = useState(false)
   const change = useChange({
     mutationFn: (status: "subscribed" | "unsubscribed") =>
-      api(`/api/admin/contacts/${contact.id}/status`, { body: { status } }),
+      api(`/api/v1/contacts/${contact.id}/status`, { body: { status } }),
     onSuccess: (_, status) => {
       setConfirming(false)
       toast.success(
@@ -374,9 +374,9 @@ function ConnectContacts({ origin }: { origin: string }) {
         <EmptyTitle>Connect your contacts</EmptyTitle>
         <EmptyDescription>
           Sendr doesn't import spreadsheets. Your app tells it who your users
-          are, so the list stays current on its own. Create an API key in{" "}
-          <Link to="/settings">Settings</Link>, then call the contacts API
-          whenever someone signs up or changes their email.
+          are, so the list stays current on its own. Create a key on the{" "}
+          <Link to="/api">API</Link> page, then call the contacts API whenever
+          someone signs up or changes their email.
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent className="max-w-none items-stretch gap-6">

@@ -327,7 +327,7 @@ function EditSender({ sender }: { sender: Sender }) {
   })
   const save = useChange({
     mutationFn: (body: typeof values) =>
-      api(`/api/admin/senders/${sender.id}`, { method: "PATCH", body }),
+      api(`/api/v1/senders/${sender.id}`, { method: "PATCH", body }),
     onSuccess: () => toast.success("Sender saved"),
     meta: { silent: true },
   })
@@ -386,8 +386,7 @@ function RemoveSender({ sender }: { sender: Sender }) {
   const [open, setOpen] = useState(false)
   // Not useChange: reloading this page would find the sender gone before navigating away.
   const remove = useMutation({
-    mutationFn: () =>
-      api(`/api/admin/senders/${sender.id}`, { method: "DELETE" }),
+    mutationFn: () => api(`/api/v1/senders/${sender.id}`, { method: "DELETE" }),
     onSuccess: async () => {
       setOpen(false)
       await navigate("/senders")

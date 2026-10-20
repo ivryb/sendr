@@ -9,9 +9,11 @@ import {
 } from "drizzle-orm/sqlite-core"
 
 import {
+  API_KEY_ACCESS,
   CAMPAIGN_STATUSES,
   CONTACT_STATUSES,
   DELIVERY_STATUSES,
+  EMAIL_STATUSES,
 } from "../../shared/model"
 
 export * from "./authSchema"
@@ -118,9 +120,30 @@ export const deliveries = sqliteTable(
   ]
 )
 
+/** Single emails sent through the API, so delivery reports and suppression can find them. */
+export const emails = sqliteTable(
+  "emails",
+  {
+    id: id(),
+    senderId: text("sender_id").references(() => senders.id, { onDelete: "set null" }),
+    to: text("to").notNull(),
+    subject: text("subject").notNull(),
+    status: text("status", { enum: EMAIL_STATUSES }).notNull(),
+    providerMessageId: text("provider_message_id"),
+    error: text("error"),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("emails_provider_message_idx").on(table.providerMessageId),
+    index("emails_to_idx").on(table.to),
+  ]
+)
+
 export const apiKeys = sqliteTable("api_keys", {
   id: id(),
   name: text("name").notNull(),
+  // Keys made before access levels existed could only manage contacts.
+  access: text("access", { enum: API_KEY_ACCESS }).notNull().default("contacts"),
   prefix: text("prefix").notNull(),
   hash: text("hash").notNull().unique(),
   createdAt: createdAt(),

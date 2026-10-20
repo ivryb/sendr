@@ -30,6 +30,20 @@ export const CAMPAIGN_STATUSES = [
 ] as const
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number]
 
+export const EMAIL_STATUSES = ["sent", "delivered", "bounced", "complained", "failed"] as const
+export type EmailStatus = (typeof EMAIL_STATUSES)[number]
+
+/** A single email sent through the API, outside any campaign. */
+export type Email = {
+  id: string
+  senderId: string | null
+  to: string
+  subject: string
+  status: EmailStatus
+  error: string | null
+  createdAt: string
+}
+
 export type CampaignAction = "start" | "approve" | "cancel"
 
 /** Actions the operator can take from each campaign status. */
@@ -98,9 +112,17 @@ export type DnsRecord = {
   status: "verified" | "pending" | "recommended"
 }
 
+/**
+ * What an API key may do. "contacts" and "emails" suit an app's backend; "full" is everything
+ * the admin can do, for agents.
+ */
+export const API_KEY_ACCESS = ["contacts", "emails", "full"] as const
+export type ApiKeyAccess = (typeof API_KEY_ACCESS)[number]
+
 export type ApiKey = {
   id: string
   name: string
+  access: ApiKeyAccess
   prefix: string
   createdAt: string
   lastUsedAt: string | null

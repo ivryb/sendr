@@ -33,7 +33,11 @@ export function renderEmail(input: RenderInput): RenderedEmail {
 
   return {
     subject,
-    html: layout({ subject, body, footer, unsubscribeUrl: input.unsubscribeUrl }),
+    html: layout({
+      subject,
+      body,
+      footer: { html: footer, unsubscribeUrl: input.unsubscribeUrl },
+    }),
     text: [
       merge(input.markdown, (text) => text),
       "--",
@@ -45,12 +49,29 @@ export function renderEmail(input: RenderInput): RenderedEmail {
   }
 }
 
+/**
+ * A single email, like a receipt or a welcome note: Markdown in the same layout as campaigns,
+ * without the campaign footer or unsubscribe link.
+ */
+export function renderMessage(input: { subject: string; markdown: string }): RenderedEmail {
+  return {
+    subject: input.subject,
+    html: layout({ subject: input.subject, body: marked.parse(input.markdown) as string }),
+    text: input.markdown,
+  }
+}
+
 function layout(parts: {
   subject: string
   body: string
-  footer: string
-  unsubscribeUrl: string
+  footer?: { html: string; unsubscribeUrl: string }
 }) {
+  const footer =
+    parts.footer &&
+    `<div class="sendr-footer" style="margin-top:40px;padding-top:20px;border-top:1px solid #e7e5e4;font-size:13px;line-height:1.5;color:#78716c;">
+${parts.footer.html}
+<p><a href="${escapeHtml(parts.footer.unsubscribeUrl)}" style="color:#78716c;">Unsubscribe</a></p>
+</div>`
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -72,10 +93,7 @@ function layout(parts: {
 <body style="margin:0;padding:0;background:#ffffff;">
 <div style="max-width:600px;margin:0 auto;padding:32px 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1c1917;">
 <div class="sendr-body">${parts.body}</div>
-<div class="sendr-footer" style="margin-top:40px;padding-top:20px;border-top:1px solid #e7e5e4;font-size:13px;line-height:1.5;color:#78716c;">
-${parts.footer}
-<p><a href="${escapeHtml(parts.unsubscribeUrl)}" style="color:#78716c;">Unsubscribe</a></p>
-</div>
+${footer ?? ""}
 </div>
 </body>
 </html>`

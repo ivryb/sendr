@@ -363,7 +363,7 @@ function ActionButton({
   const run = useChange({
     mutationFn: () =>
       api<{ campaign: Campaign }>(
-        `/api/admin/campaigns/${campaign.id}/${action}`,
+        `/api/v1/campaigns/${campaign.id}/${action}`,
         { body: {} }
       ),
     onSuccess: () => setOpen(false),

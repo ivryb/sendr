@@ -5,6 +5,7 @@ import type { DnsRecord, Sender } from "../../shared/model"
 import { db } from "../db/client"
 import { campaigns, senders } from "../db/schema"
 import { AwsError, sesAccount } from "../email/ses-account"
+import { DomainError } from "../lib/errors"
 import { getSettings, type InstanceSettings } from "../lib/settings"
 
 export type SenderRow = typeof senders.$inferSelect
@@ -20,12 +21,13 @@ export const senderInput = z.object({
 
 export const senderChanges = senderInput.pick({ name: true, replyTo: true }).partial()
 
+const SENDER_ERROR_STATUS = { not_found: 404, invalid: 400 } as const
+
 /** Something the admin can fix, like a key without the right permissions. */
-export class SenderError extends Error {
-  readonly code: "not_found" | "invalid"
-  constructor(code: SenderError["code"], message: string) {
-    super(message)
-    this.code = code
+export class SenderError extends DomainError {
+  declare readonly code: keyof typeof SENDER_ERROR_STATUS
+  constructor(code: keyof typeof SENDER_ERROR_STATUS, message: string) {
+    super(code, SENDER_ERROR_STATUS[code], message)
   }
 }
 

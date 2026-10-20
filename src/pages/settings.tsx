@@ -11,30 +11,26 @@ import { Spinner } from "@/components/ui/spinner"
 import { adminContext } from "@/lib/admin.server"
 import { api, ApiError } from "@/lib/api"
 import { useChange } from "@/lib/mutations"
-import { ApiKeysSection } from "@/pages/settings-api-keys"
 import { PasskeysSection } from "@/pages/settings-passkeys"
 import type { Settings } from "../../shared/model"
 import { listPasskeys } from "../../worker/auth"
-import { listApiKeys } from "../../worker/domain/apiKeys"
 import { getSettings, toSettingsDto } from "../../worker/lib/settings"
 
 export async function loader({ context }: Route.LoaderArgs) {
-  const [settings, apiKeys, passkeys] = await Promise.all([
+  const [settings, passkeys] = await Promise.all([
     getSettings(),
-    listApiKeys(),
     listPasskeys(context.get(adminContext).id),
   ])
-  return { settings: toSettingsDto(settings), apiKeys, passkeys }
+  return { settings: toSettingsDto(settings), passkeys }
 }
 
 export default function SettingsPage({ loaderData }: Route.ComponentProps) {
-  const { settings, apiKeys, passkeys } = loaderData
+  const { settings, passkeys } = loaderData
   return (
     <div className="flex flex-col gap-2">
       <PageHeader title="Settings" />
       <div className="flex flex-col divide-y">
         <PublicUrlSection publicUrl={settings.publicUrl} />
-        <ApiKeysSection apiKeys={apiKeys} />
         <PasskeysSection passkeys={passkeys} />
       </div>
     </div>
@@ -45,7 +41,7 @@ function PublicUrlSection({ publicUrl }: { publicUrl: string }) {
   const [value, setValue] = useState(publicUrl)
   const save = useChange({
     mutationFn: (next: string) =>
-      api<Settings>("/api/admin/settings", {
+      api<Settings>("/api/v1/settings", {
         method: "PUT",
         body: { publicUrl: next },
       }),

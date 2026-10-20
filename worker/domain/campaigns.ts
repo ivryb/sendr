@@ -13,6 +13,7 @@ import {
 } from "../../shared/model"
 import { db } from "../db/client"
 import { campaigns, deliveries } from "../db/schema"
+import { DomainError } from "../lib/errors"
 import type { InstanceSettings } from "../lib/settings"
 import { checkSender, defaultSender } from "./senders"
 
@@ -26,11 +27,12 @@ export const campaignInput = z.object({
 /** One queue message sends the campaign's next deliveries, then queues the next message. */
 export type SendMessage = { campaignId: string }
 
-export class CampaignError extends Error {
-  readonly code: "not_found" | "invalid_action" | "not_ready"
-  constructor(code: CampaignError["code"], message: string) {
-    super(message)
-    this.code = code
+const CAMPAIGN_ERROR_STATUS = { not_found: 404, invalid_action: 409, not_ready: 400 } as const
+
+export class CampaignError extends DomainError {
+  declare readonly code: keyof typeof CAMPAIGN_ERROR_STATUS
+  constructor(code: keyof typeof CAMPAIGN_ERROR_STATUS, message: string) {
+    super(code, CAMPAIGN_ERROR_STATUS[code], message)
   }
 }
 

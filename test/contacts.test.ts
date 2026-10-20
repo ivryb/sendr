@@ -1,18 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest"
 
 import type { Contact } from "../shared/model"
-import { request, signInAsAdmin } from "./helpers"
+import { createApiKey, request, signInAsAdmin } from "./helpers"
 
 let admin: string
 let apiKey: string
 
 beforeEach(async () => {
   admin = await signInAsAdmin()
-  const created = await request("/api/admin/api-keys", {
-    cookie: admin,
-    json: { name: "Listenly" },
-  })
-  apiKey = (await created.json<{ key: string }>()).key
+  apiKey = await createApiKey(admin)
 })
 
 const upsert = (externalId: string, body: Record<string, unknown>) =>
@@ -23,7 +19,7 @@ const upsert = (externalId: string, body: Record<string, unknown>) =>
   })
 
 async function listContacts(query = "") {
-  const response = await request(`/api/admin/contacts${query}`, { cookie: admin })
+  const response = await request(`/api/v1/contacts${query}`, { cookie: admin })
   return (await response.json<{ contacts: Contact[] }>()).contacts
 }
 
@@ -116,9 +112,9 @@ describe("contacts API", () => {
   })
 
   it("a revoked API key stops working", async () => {
-    const keys = await request("/api/admin/api-keys", { cookie: admin })
+    const keys = await request("/api/v1/api-keys", { cookie: admin })
     const [key] = (await keys.json<{ apiKeys: { id: string }[] }>()).apiKeys
-    await request(`/api/admin/api-keys/${key.id}`, {
+    await request(`/api/v1/api-keys/${key.id}`, {
       method: "DELETE",
       cookie: admin,
     })
@@ -128,7 +124,7 @@ describe("contacts API", () => {
 
 describe("admin contact management", () => {
   it("the admin API requires a signed-in admin", async () => {
-    expect((await request("/api/admin/contacts")).status).toBe(401)
+    expect((await request("/api/v1/contacts")).status).toBe(401)
   })
 
   it("searches contacts by email or name", async () => {
@@ -140,12 +136,12 @@ describe("admin contact management", () => {
   it("the admin can unsubscribe and resubscribe a contact", async () => {
     await upsert("u1", { email: "ann@example.com" })
     const [contact] = await listContacts()
-    await request(`/api/admin/contacts/${contact.id}/status`, {
+    await request(`/api/v1/contacts/${contact.id}/status`, {
       cookie: admin,
       json: { status: "unsubscribed" },
     })
     expect((await listContacts())[0].status).toBe("unsubscribed")
-    await request(`/api/admin/contacts/${contact.id}/status`, {
+    await request(`/api/v1/contacts/${contact.id}/status`, {
       cookie: admin,
       json: { status: "subscribed" },
     })

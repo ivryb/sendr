@@ -4,24 +4,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { Campaign } from "../shared/model"
 import worker from "../worker"
 import { fakeAws } from "./fake-aws"
-import { addSender, request, sentEmails, signInAsAdmin } from "./helpers"
+import { addSender, createApiKey, request, sentEmails, signInAsAdmin } from "./helpers"
 
 let admin: string
 let apiKey: string
 
 beforeEach(async () => {
   admin = await signInAsAdmin()
-  await request("/api/admin/settings", {
+  await request("/api/v1/settings", {
     method: "PUT",
     cookie: admin,
     json: { footer: "Example Inc, 1 Main St" },
   })
   await addSender(admin)
-  const created = await request("/api/admin/api-keys", {
-    cookie: admin,
-    json: { name: "test" },
-  })
-  apiKey = (await created.json<{ key: string }>()).key
+  apiKey = await createApiKey(admin)
 })
 
 async function addContacts(count: number) {
@@ -43,7 +39,7 @@ async function addContacts(count: number) {
 }
 
 async function newCampaign(body: Record<string, unknown> = {}) {
-  const response = await request("/api/admin/campaigns", {
+  const response = await request("/api/v1/campaigns", {
     cookie: admin,
     json: { subject: "News for {{first_name|you}}", markdown: "Hey {{first_name|there}}!", ...body },
   })
@@ -51,11 +47,11 @@ async function newCampaign(body: Record<string, unknown> = {}) {
 }
 
 async function act(id: string, action: "start" | "approve" | "cancel") {
-  return request(`/api/admin/campaigns/${id}/${action}`, { cookie: admin, json: {} })
+  return request(`/api/v1/campaigns/${id}/${action}`, { cookie: admin, json: {} })
 }
 
 async function campaign(id: string) {
-  const response = await request(`/api/admin/campaigns/${id}`, { cookie: admin })
+  const response = await request(`/api/v1/campaigns/${id}`, { cookie: admin })
   return (await response.json<{ campaign: Campaign }>()).campaign
 }
 
@@ -165,7 +161,7 @@ describe("sending a campaign", () => {
     expect((await act(id, "start")).status).toBe(409)
 
     const draft = await newCampaign()
-    await request(`/api/admin/campaigns/${draft.id}`, {
+    await request(`/api/v1/campaigns/${draft.id}`, {
       method: "PUT",
       cookie: admin,
       json: { senderId: null },
@@ -190,7 +186,7 @@ describe("sending a campaign", () => {
     await addContacts(1)
     const { id } = await newCampaign()
     await act(id, "start")
-    const response = await request(`/api/admin/campaigns/${id}`, {
+    const response = await request(`/api/v1/campaigns/${id}`, {
       method: "PUT",
       cookie: admin,
       json: { subject: "Changed" },
@@ -201,7 +197,7 @@ describe("sending a campaign", () => {
   it("a test send goes only to the admin and doesn't count as a delivery", async () => {
     await addContacts(2)
     const { id } = await newCampaign()
-    await request(`/api/admin/campaigns/${id}/test`, { cookie: admin, json: {} })
+    await request(`/api/v1/campaigns/${id}/test`, { cookie: admin, json: {} })
 
     expect(sentEmails()).toMatchObject([
       { to: "owner@example.com", subject: "[Test] News for you" },

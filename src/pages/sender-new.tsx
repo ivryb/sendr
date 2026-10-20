@@ -117,7 +117,7 @@ function ConnectStep() {
   const [region, setRegion] = useState("us-east-1")
   const connect = useMutation({
     mutationFn: (values: Values) =>
-      api<{ sender: Sender }>("/api/admin/senders", { body: values }),
+      api<{ sender: Sender }>("/api/v1/senders", { body: values }),
     onSuccess: ({ sender }) => navigate(`/senders/${sender.id}`),
     meta: { silent: true },
   })
