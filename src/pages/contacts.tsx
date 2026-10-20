@@ -162,21 +162,31 @@ export default function ContactsPage({ loaderData }: Route.ComponentProps) {
 
       <div
         className={cn(
-          "overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 transition-opacity",
+          "@container overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 transition-opacity",
           updating && "opacity-60"
         )}
       >
-        <Table>
+        {/*
+          Fixed column widths, so switching filters doesn't reflow the table. Columns appear
+          as the table (not the window) gets wider, since the sidebar takes part of the window.
+        */}
+        <Table className="table-fixed">
           <TableHeader>
             <TableRow>
               <TableHead className="pl-4">Email</TableHead>
-              <TableHead className="hidden md:table-cell">Name</TableHead>
-              <TableHead className="hidden lg:table-cell">
+              <TableHead className="hidden w-36 @3xl:table-cell">
+                Name
+              </TableHead>
+              <TableHead className="hidden w-28 @4xl:table-cell">
                 External ID
               </TableHead>
-              <TableHead className="hidden sm:table-cell">Status</TableHead>
-              <TableHead className="hidden sm:table-cell">Added</TableHead>
-              <TableHead className="pr-4">
+              <TableHead className="hidden w-36 @lg:table-cell">
+                Status
+              </TableHead>
+              <TableHead className="hidden w-28 @2xl:table-cell">
+                Added
+              </TableHead>
+              <TableHead className="w-32 pr-4">
                 <span className="sr-only">Actions</span>
               </TableHead>
             </TableRow>
@@ -237,33 +247,33 @@ function ContactRow({ contact }: { contact: Contact }) {
   const meta = CONTACT_STATUS[contact.status]
   return (
     <TableRow>
-      <TableCell className="max-w-0 pl-4 sm:max-w-none">
+      <TableCell className="pl-4">
         <div className="flex min-w-0 flex-col">
           <span className="truncate font-medium">{contact.email}</span>
-          <span className="truncate text-xs text-muted-foreground md:hidden">
-            <span className="sm:hidden">
+          <span className="truncate text-xs text-muted-foreground @3xl:hidden">
+            <span className="@lg:hidden">
               {[meta.label, contact.firstName].filter(Boolean).join(", ")}
             </span>
-            <span className="hidden sm:inline">{contact.firstName}</span>
+            <span className="hidden @lg:inline">{contact.firstName}</span>
           </span>
         </div>
       </TableCell>
-      <TableCell className="hidden md:table-cell">
+      <TableCell className="hidden truncate @3xl:table-cell">
         {contact.firstName}
       </TableCell>
-      <TableCell className="hidden font-mono text-xs text-muted-foreground lg:table-cell">
+      <TableCell className="hidden truncate font-mono text-xs text-muted-foreground @4xl:table-cell">
         {contact.externalId}
       </TableCell>
-      <TableCell className="hidden sm:table-cell">
+      <TableCell className="hidden @lg:table-cell">
         <span className="inline-flex items-center gap-1.5 text-sm">
           <span className={cn("size-1.5 rounded-full", meta.dot)} />
           {meta.label}
         </span>
       </TableCell>
-      <TableCell className="hidden text-muted-foreground sm:table-cell">
+      <TableCell className="hidden text-muted-foreground @2xl:table-cell">
         {formatDate(contact.createdAt)}
       </TableCell>
-      <TableCell className="w-0 pr-4 text-right">
+      <TableCell className="pr-4 text-right">
         <StatusAction contact={contact} />
       </TableCell>
     </TableRow>

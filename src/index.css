@@ -128,6 +128,8 @@
   }
   html {
     @apply font-sans;
+    /* Pages short enough not to scroll keep the scrollbar's space, so nothing shifts sideways. */
+    scrollbar-gutter: stable;
   }
 }
 

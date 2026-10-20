@@ -83,7 +83,8 @@ export default function AppShell() {
           <AccountMenu />
         </SidebarFooter>
       </Sidebar>
-      <SidebarInset>
+      {/* min-w-0: wide content scrolls inside a page instead of widening the page. */}
+      <SidebarInset className="min-w-0">
         <header className="flex h-12 items-center gap-2 border-b px-3 md:hidden">
           <SidebarTrigger />
           <Link to="/campaigns" aria-label="Sendr home">
