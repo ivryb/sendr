@@ -64,7 +64,8 @@ curl -X DELETE https://emails.example.com/api/v1/contacts/user_123 -H "Authoriza
 ```
 
 - New contacts start subscribed. Pass `"unsubscribed": true` to import someone who already opted out.
-- The API can unsubscribe a contact but never resubscribes one. Only the recipient (from the unsubscribe page) or an admin can.
+- Updating a contact never resubscribes it. Only the recipient (from the unsubscribe page) or an admin can.
+- Deleting someone who unsubscribed, bounced or complained keeps their address on file, so adding them back keeps them opted out.
 - An email that already belongs to another user ID is rejected with `409`. Every call is safe to repeat, so rerunning a full backfill repairs any drift.
 
 ### Send single emails

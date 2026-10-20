@@ -37,8 +37,12 @@ describe("SES provider", () => {
     expect(await provider.send(email)).toEqual({ providerMessageId: "ses-123" })
 
     const [sent] = requests
-    expect(sent.url).toBe("https://email.us-east-1.amazonaws.com/v2/email/outbound-emails")
-    expect(sent.headers.get("authorization")).toMatch(/^AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE\//)
+    expect(sent.url).toBe(
+      "https://email.us-east-1.amazonaws.com/v2/email/outbound-emails"
+    )
+    expect(sent.headers.get("authorization")).toMatch(
+      /^AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE\//
+    )
     expect(await sent.json()).toEqual({
       FromEmailAddress: "Evan <evan@example.com>",
       Destination: { ToAddresses: ["ann@example.com"] },
@@ -57,14 +61,31 @@ describe("SES provider", () => {
     })
   })
 
+  it("leaves out the text part of an HTML-only email", async () => {
+    const { provider, requests } = providerReplying(
+      Response.json({ MessageId: "ses-1" })
+    )
+    await provider.send({ ...email, text: "" })
+    const body = await requests[0].json<{
+      Content: { Simple: { Body: object } }
+    }>()
+    expect(body.Content.Simple.Body).toEqual({
+      Html: { Data: "<p>Hi</p>", Charset: "UTF-8" },
+    })
+  })
+
   it("a rejected message fails permanently", async () => {
     const { provider } = providerReplying(
       new Response('{"message":"Email address is not verified."}', {
         status: 400,
-        headers: { "x-amzn-ErrorType": "MessageRejected:http://internal.amazon.com/" },
+        headers: {
+          "x-amzn-ErrorType": "MessageRejected:http://internal.amazon.com/",
+        },
       })
     )
-    await expect(provider.send(email)).rejects.toBeInstanceOf(PermanentSendError)
+    await expect(provider.send(email)).rejects.toBeInstanceOf(
+      PermanentSendError
+    )
   })
 
   it("throttling is retried rather than failing the email", async () => {
@@ -86,8 +107,16 @@ describe("SES events from EventBridge", () => {
     expect(
       parseSesEvents([
         event({ eventType: "Delivery", mail: { messageId: "a" } }),
-        event({ eventType: "Bounce", mail: { messageId: "b" }, bounce: { bounceType: "Permanent" } }),
-        event({ eventType: "Bounce", mail: { messageId: "c" }, bounce: { bounceType: "Transient" } }),
+        event({
+          eventType: "Bounce",
+          mail: { messageId: "b" },
+          bounce: { bounceType: "Permanent" },
+        }),
+        event({
+          eventType: "Bounce",
+          mail: { messageId: "c" },
+          bounce: { bounceType: "Transient" },
+        }),
         event({ eventType: "Complaint", mail: { messageId: "d" } }),
         event({ eventType: "Open", mail: { messageId: "e" } }),
       ])
@@ -99,8 +128,8 @@ describe("SES events from EventBridge", () => {
   })
 
   it("accepts a bare event detail", () => {
-    expect(parseSesEvents({ eventType: "Delivery", mail: { messageId: "a" } })).toEqual([
-      { type: "delivered", providerMessageId: "a" },
-    ])
+    expect(
+      parseSesEvents({ eventType: "Delivery", mail: { messageId: "a" } })
+    ).toEqual([{ type: "delivered", providerMessageId: "a" }])
   })
 })

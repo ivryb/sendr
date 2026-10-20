@@ -50,8 +50,23 @@ export async function upsertContact(
   return { ok: true }
 }
 
+/**
+ * Removes the contact for a deleted user. One who unsubscribed, bounced or complained is kept,
+ * detached from the user ID, so signing up again with that address can't undo their opt-out.
+ */
 export async function deleteContact(externalId: string) {
-  await db().delete(contacts).where(eq(contacts.externalId, externalId))
+  const contact = await db().query.contacts.findFirst({
+    where: eq(contacts.externalId, externalId),
+  })
+  if (!contact) return
+  if (contact.status === "subscribed") {
+    await db().delete(contacts).where(eq(contacts.id, contact.id))
+  } else {
+    await db()
+      .update(contacts)
+      .set({ externalId: null, firstName: null, fields: {} })
+      .where(eq(contacts.id, contact.id))
+  }
 }
 
 export async function listContacts(filter: {

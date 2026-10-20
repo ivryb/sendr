@@ -45,7 +45,8 @@ export function sesProvider(options: SesOptions): EmailProvider {
               Subject: { Data: email.subject, Charset: "UTF-8" },
               Body: {
                 Html: { Data: email.html, Charset: "UTF-8" },
-                Text: { Data: email.text, Charset: "UTF-8" },
+                // An HTML-only email has no text part; SES rejects an empty one.
+                Text: email.text ? { Data: email.text, Charset: "UTF-8" } : undefined,
               },
               Headers: Object.entries(email.headers ?? {}).map(
                 ([Name, Value]) => ({ Name, Value })
@@ -60,10 +61,21 @@ export function sesProvider(options: SesOptions): EmailProvider {
         return { providerMessageId: MessageId }
       }
       const type = response.headers.get("x-amzn-errortype")?.split(":")[0]
-      const message = `SES ${response.status} ${type ?? ""}: ${await response.text()}`
-      if (type && PERMANENT_ERRORS.has(type)) throw new PermanentSendError(message)
-      throw new Error(message)
+      const body = await response.text()
+      if (type && PERMANENT_ERRORS.has(type)) {
+        // Shown to admins and API callers, so only SES's own explanation, not the raw reply.
+        throw new PermanentSendError(readMessage(body) ?? `SES rejected the email (${type}).`)
+      }
+      throw new Error(`SES ${response.status} ${type ?? ""}: ${body}`)
     },
+  }
+}
+
+function readMessage(body: string) {
+  try {
+    return (JSON.parse(body) as { message?: string }).message
+  } catch {
+    return undefined
   }
 }
 

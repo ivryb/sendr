@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import { csrf } from "hono/csrf"
 import { createMiddleware } from "hono/factory"
 import { z } from "zod"
 
@@ -37,7 +38,7 @@ import {
 import { sendTestEmail } from "../domain/sending"
 import { getSettings, toSettingsDto, updateSettings } from "../lib/settings"
 import { apiDocs } from "./docs"
-import { parseJson } from "./validation"
+import { parseJson, parseQuery } from "./validation"
 
 /** Who is calling: the signed-in admin (the admin app), or an app or agent with an API key. */
 type Caller = { admin: Admin; access: "full" } | { admin: null; access: ApiKeyAccess }
@@ -107,6 +108,8 @@ export const api = new Hono<ApiEnv>()
       "content-type": "text/markdown; charset=utf-8",
     })
   })
+  // Form posts from another site, even a sibling subdomain, can't ride the admin's session.
+  .use(csrf())
   .use(authenticate)
   .get("/me", (c) => {
     const { admin, access } = c.get("caller")
@@ -115,7 +118,7 @@ export const api = new Hono<ApiEnv>()
 
   // Contacts
   .get("/contacts", requires("contacts"), async (c) => {
-    const query = contactsQuery.parse(c.req.query())
+    const query = parseQuery(c, contactsQuery)
     const [list, counts] = await Promise.all([listContacts(query), contactCounts()])
     return c.json({ ...list, counts })
   })

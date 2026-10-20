@@ -62,7 +62,12 @@ export async function sendSingleEmail(input: z.infer<typeof emailInput>) {
   } catch (error) {
     if (!(error instanceof PermanentSendError)) {
       await db().delete(emails).where(eq(emails.id, row.id))
-      throw error
+      console.error("Single email send failed", error)
+      throw new DomainError(
+        "send_failed",
+        503,
+        "The email service didn't take the email right now (it may be busy or paused). Nothing was sent; try again shortly."
+      )
     }
     const [failed] = await db()
       .update(emails)

@@ -26,9 +26,11 @@ same contact. New contacts start subscribed.
 
 - \`PUT /contacts/{externalId}\` with \`{ "email", "firstName"?, "fields"?: { "plan": "pro" }, "unsubscribed"?: true }\`
   adds or updates one contact. \`409 email_taken\` if the email belongs to another user ID.
-  \`unsubscribed: true\` unsubscribes; the API never resubscribes anyone.
+  \`unsubscribed: true\` unsubscribes. Updating a contact never resubscribes it.
 - \`POST /contacts/batch\` with \`{ "contacts": [{ "externalId", "email", ... }] }\`, up to 100.
 - \`DELETE /contacts/{externalId}\` removes a contact, for example when the user deletes their account.
+  Someone who unsubscribed, bounced or complained is remembered by address, so adding them back
+  keeps them opted out.
 - \`GET /contacts?q=&status=&limit=50&offset=0\` lists contacts with \`total\` and per-status \`counts\`.
   Statuses: subscribed, unsubscribed, bounced, complained.
 - \`POST /contacts/{id}/status\` with \`{ "status": "subscribed" | "unsubscribed" }\` (full access, by
@@ -50,7 +52,10 @@ refused with \`422 suppressed\`.
 
 - \`POST /emails\` with \`{ "from": "<sender address or id>", "to", "subject", "markdown" }\`.
   Instead of \`markdown\`, send \`html\` (and optionally \`text\`). Optional \`replyTo\`.
-  Returns \`{ "email": { "id", "status", ... } }\`.
+  Returns \`{ "email": { "id", "status", ... } }\`. If SES rejects the message itself (for example,
+  an unverified recipient while the SES account is in its sandbox), the reply is still 200 with
+  \`status: "failed"\` and the reason in \`error\`. \`503 send_failed\` means SES was busy or paused
+  and nothing was sent; retry later.
 - \`GET /emails/{id}\`: status is sent, delivered, bounced, complained or failed. Delivery
   reports arrive within minutes.
 
@@ -75,7 +80,8 @@ Statuses: draft, first_batch, awaiting_approval, sending, sent, cancelled.
 - \`POST /campaigns\` with \`{ "subject"?, "markdown"?, "senderId"?, "firstBatchSize"? }\` creates a
   draft. Without \`senderId\` it uses the first verified sender.
 - \`PUT /campaigns/{id}\` edits a draft. \`DELETE /campaigns/{id}\` deletes a draft.
-- \`POST /campaigns/{id}/test\` with \`{ "to": "you@example.com" }\` sends one test copy.
+- \`POST /campaigns/{id}/test\` with \`{ "to": "you@example.com" }\` sends one test copy. \`to\` is
+  required with an API key.
 - \`POST /campaigns/{id}/start\`, \`/approve\`, \`/cancel\`.
 
 The footer under every campaign (with the sender's postal address) is \`footer\` in settings.

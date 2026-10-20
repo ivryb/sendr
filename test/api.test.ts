@@ -1,4 +1,5 @@
 import { env } from "cloudflare:test"
+import { exports } from "cloudflare:workers"
 import { beforeEach, describe, expect, it } from "vitest"
 
 import type { Email } from "../shared/model"
@@ -176,5 +177,60 @@ describe("single emails", () => {
 
   it("needs a message", async () => {
     expect((await sendEmail(key, {})).status).toBe(400)
+  })
+})
+
+describe("safety", () => {
+  it("refuses form posts from another site that ride the admin's session", async () => {
+    // Built by hand: the request helper always sends this instance's own origin.
+    const response = await exports.default.fetch(
+      new Request("https://sendr.test/api/v1/campaigns", {
+        method: "POST",
+        headers: {
+          cookie: admin,
+          origin: "https://evil.example",
+          "content-type": "text/plain",
+        },
+        body: "{}",
+      })
+    )
+    expect(response.status).toBe(403)
+  })
+
+  it("answers a bad query with 400, not a crash", async () => {
+    const key = await createApiKey(admin, "contacts")
+    const response = await request("/api/v1/contacts?limit=0", { bearer: key })
+    expect(response.status).toBe(400)
+  })
+
+  it("a deleted user who unsubscribed stays unsubscribed when added back", async () => {
+    const key = await createApiKey(admin, "contacts")
+    const put = (externalId: string, body: Record<string, unknown>) =>
+      request(`/api/v1/contacts/${externalId}`, {
+        method: "PUT",
+        bearer: key,
+        json: body,
+      })
+    await put("u1", { email: "ann@example.com", unsubscribed: true })
+    await request("/api/v1/contacts/u1", { method: "DELETE", bearer: key })
+    await put("u2", { email: "ann@example.com" })
+
+    const list = await request("/api/v1/contacts", { bearer: key })
+    const { contacts } = await list.json<{
+      contacts: { externalId: string; status: string }[]
+    }>()
+    expect(contacts).toEqual([
+      expect.objectContaining({ externalId: "u2", status: "unsubscribed" }),
+    ])
+  })
+
+  it("finds a sender by address whatever its case", async () => {
+    await addSender(admin, { email: "Hello@Example.com" })
+    const key = await createApiKey(admin, "emails")
+    const response = await sendEmail(key, {
+      from: "hello@example.com",
+      markdown: "Hi",
+    })
+    expect(response.status).toBe(200)
   })
 })

@@ -12,7 +12,7 @@ export type SenderRow = typeof senders.$inferSelect
 
 export const senderInput = z.object({
   name: z.string().trim(),
-  email: z.email(),
+  email: z.email().transform((email) => email.trim().toLowerCase()),
   replyTo: z.union([z.email(), z.literal("")]).default(""),
   region: z.string().regex(/^[a-z]{2}(-[a-z]+)+-\d$/, "Pick an AWS region."),
   accessKeyId: z.string().trim().min(16, "Paste the whole access key ID."),
