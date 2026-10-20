@@ -1,13 +1,15 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useMutation,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query"
 import { CheckIcon, PlusIcon } from "lucide-react"
 import { Link, useNavigate } from "react-router"
 import { cn } from "cn"
 
 import { CampaignStatusBadge } from "@/components/campaign-status"
-import { LoadError } from "@/components/load-error"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { api, contactCounts, queries } from "@/lib/api"
 import { deliveryStats, refreshInterval } from "@/lib/campaign"
@@ -15,7 +17,7 @@ import { formatDate, formatNumber } from "@/lib/format"
 import type { Campaign } from "../../shared/model"
 
 export function CampaignsPage() {
-  const campaigns = useQuery({
+  const campaigns = useSuspenseQuery({
     ...queries.campaigns,
     refetchInterval: (query) => {
       const intervals = (query.state.data ?? [])
@@ -24,7 +26,7 @@ export function CampaignsPage() {
       return intervals.length ? Math.min(...intervals) : false
     },
     refetchOnWindowFocus: true,
-  })
+  }).data
   const create = useCreateCampaign()
 
   return (
@@ -39,13 +41,9 @@ export function CampaignsPage() {
           </Button>
         }
       />
-      {campaigns.isPending ? (
-        <ListSkeleton />
-      ) : campaigns.isError && !campaigns.data ? (
-        <LoadError query={campaigns} />
-      ) : campaigns.data?.length ? (
+      {campaigns.length ? (
         <ul className="divide-y overflow-hidden rounded-xl ring-1 ring-foreground/10">
-          {campaigns.data.map((campaign) => (
+          {campaigns.map((campaign) => (
             <CampaignRow key={campaign.id} campaign={campaign} />
           ))}
         </ul>
@@ -109,11 +107,11 @@ const STEP_ACTION =
   "w-fit text-sm font-medium underline underline-offset-4 hover:text-muted-foreground"
 
 function GettingStarted({ onCreate }: { onCreate: () => void }) {
-  const settings = useQuery(queries.settings).data
-  const counts = useQuery(contactCounts).data?.counts
+  const settings = useSuspenseQuery(queries.settings).data
+  const counts = useSuspenseQuery(contactCounts).data.counts
   const steps = [
     {
-      done: Boolean(settings?.fromEmail),
+      done: Boolean(settings.fromEmail),
       title: "Add a sender",
       body: "Choose the name and address your emails come from, and your postal address for the footer.",
       action: (
@@ -123,7 +121,7 @@ function GettingStarted({ onCreate }: { onCreate: () => void }) {
       ),
     },
     {
-      done: Boolean(counts && Object.values(counts).some(Boolean)),
+      done: Object.values(counts).some(Boolean),
       title: "Connect your contacts",
       body: "Create an API key and sync your users from your app.",
       action: (
@@ -182,18 +180,5 @@ function GettingStarted({ onCreate }: { onCreate: () => void }) {
         ))}
       </ol>
     </section>
-  )
-}
-
-function ListSkeleton() {
-  return (
-    <div className="flex flex-col gap-px overflow-hidden rounded-xl ring-1 ring-foreground/10">
-      {[0, 1, 2].map((index) => (
-        <div key={index} className="flex flex-col gap-2 bg-card px-5 py-4">
-          <Skeleton className="h-4 w-1/2" />
-          <Skeleton className="h-3 w-1/4" />
-        </div>
-      ))}
-    </div>
   )
 }

@@ -1,5 +1,9 @@
 import { useState, type FormEvent } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useMutation,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query"
 import { KeyRoundIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -32,14 +36,14 @@ import { formatDate } from "@/lib/format"
 import type { ApiKey } from "../../shared/model"
 
 export function ApiKeysSection() {
-  const keys = useQuery(queries.apiKeys)
+  const keys = useSuspenseQuery(queries.apiKeys)
   return (
     <SettingsSection
       title="API keys"
       description="Your app uses a key to add, update and remove contacts. Make one per app so you can revoke them separately."
     >
       <div className="flex flex-col gap-4">
-        {keys.data && keys.data.length > 0 && (
+        {keys.data.length > 0 && (
           <ul className="divide-y rounded-xl bg-card ring-1 ring-foreground/10">
             {keys.data.map((key) => (
               <ApiKeyRow key={key.id} apiKey={key} />

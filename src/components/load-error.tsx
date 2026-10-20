@@ -5,9 +5,11 @@ import { Spinner } from "@/components/ui/spinner"
 
 /** Stands in for a page's content when its request failed, so a blip never reads as "empty". */
 export function LoadError({
-  query,
+  onRetry,
+  retrying,
 }: {
-  query: { refetch: () => unknown; isFetching: boolean }
+  onRetry: () => unknown
+  retrying: boolean
 }) {
   return (
     <div role="alert" className="flex flex-col items-start gap-4 py-16">
@@ -17,12 +19,8 @@ export function LoadError({
           Check your connection, then try again.
         </p>
       </div>
-      <Button
-        variant="outline"
-        onClick={() => query.refetch()}
-        disabled={query.isFetching}
-      >
-        {query.isFetching ? <Spinner /> : <RotateCwIcon />}
+      <Button variant="outline" onClick={onRetry} disabled={retrying}>
+        {retrying ? <Spinner /> : <RotateCwIcon />}
         Retry
       </Button>
     </div>

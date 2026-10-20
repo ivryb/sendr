@@ -4,7 +4,7 @@ import { hydrate, type DehydratedState } from "@tanstack/react-query"
 import { createBrowserRouter, RouterProvider } from "react-router"
 
 import "./index.css"
-import { AppProviders, routes } from "./App.tsx"
+import { AppProviders, createRoutes } from "./App.tsx"
 import { createQueryClient } from "@/lib/query-client"
 import { rememberTimeZone } from "@/lib/ssr"
 
@@ -21,7 +21,7 @@ hydrateRoot(
   document.getElementById("root")!,
   <StrictMode>
     <AppProviders client={queryClient}>
-      <RouterProvider router={createBrowserRouter(routes)} />
+      <RouterProvider router={createBrowserRouter(createRoutes(queryClient))} />
     </AppProviders>
   </StrictMode>
 )

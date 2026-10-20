@@ -1,9 +1,12 @@
 import { useState, type FormEvent, type ReactNode } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useMutation,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query"
 import { toast } from "sonner"
 
 import { CopyField } from "@/components/copy-button"
-import { LoadError } from "@/components/load-error"
 import { PageHeader } from "@/components/page-header"
 import { SettingsSection } from "@/components/settings-section"
 import { Button } from "@/components/ui/button"
@@ -15,7 +18,6 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { api, ApiError, queries } from "@/lib/api"
@@ -37,74 +39,65 @@ type FieldConfig = {
 }
 
 export function SettingsPage() {
-  const settings = useQuery(queries.settings)
+  const settings = useSuspenseQuery(queries.settings).data
   return (
     <div className="flex flex-col gap-2">
       <PageHeader title="Settings" />
-      {settings.data ? (
-        <div className="flex flex-col divide-y">
-          <SettingsForm
-            settings={settings.data}
-            title="Sender"
-            description="Who your campaigns come from. The address must be verified in Amazon SES."
-            fields={[
-              { name: "fromName", label: "Name", placeholder: "Ada from Acme" },
-              {
-                name: "fromEmail",
-                label: "Email",
-                type: "email",
-                placeholder: "news@acme.com",
-              },
-              {
-                name: "replyTo",
-                label: "Reply-to",
-                type: "email",
-                placeholder: "ada@acme.com",
-                description:
-                  "Optional. Where replies go, if not the address above.",
-              },
-            ]}
-          />
-          <SettingsForm
-            settings={settings.data}
-            title="Footer"
-            description="Shown at the bottom of every email, above the unsubscribe link Sendr adds."
-            fields={[
-              {
-                name: "footer",
-                label: "Footer",
-                multiline: true,
-                placeholder: "Acme Inc.\n1 Main Street, Springfield, CA 90000",
-                description:
-                  "Include your postal address. Anti-spam laws like CAN-SPAM require one in every marketing email. Markdown works here.",
-              },
-            ]}
-          />
-          <SettingsForm
-            settings={settings.data}
-            title="Public URL"
-            description="Where this Sendr is reachable. Unsubscribe links and the SES events endpoint use it."
-            fields={[
-              {
-                name: "publicUrl",
-                label: "Public URL",
-                type: "url",
-                placeholder: "https://sendr.acme.com",
-              },
-            ]}
-          />
-          <ApiKeysSection />
-          <SesEventsSection settings={settings.data} />
-          <PasskeysSection />
-        </div>
-      ) : settings.isError ? (
-        <LoadError query={settings} />
-      ) : (
-        <div className="flex flex-col gap-4 pt-8">
-          <Skeleton className="h-40 w-full" />
-          <Skeleton className="h-40 w-full" />
-        </div>
-      )}
+      <div className="flex flex-col divide-y">
+        <SettingsForm
+          settings={settings}
+          title="Sender"
+          description="Who your campaigns come from. The address must be verified in Amazon SES."
+          fields={[
+            { name: "fromName", label: "Name", placeholder: "Ada from Acme" },
+            {
+              name: "fromEmail",
+              label: "Email",
+              type: "email",
+              placeholder: "news@acme.com",
+            },
+            {
+              name: "replyTo",
+              label: "Reply-to",
+              type: "email",
+              placeholder: "ada@acme.com",
+              description:
+                "Optional. Where replies go, if not the address above.",
+            },
+          ]}
+        />
+        <SettingsForm
+          settings={settings}
+          title="Footer"
+          description="Shown at the bottom of every email, above the unsubscribe link Sendr adds."
+          fields={[
+            {
+              name: "footer",
+              label: "Footer",
+              multiline: true,
+              placeholder: "Acme Inc.\n1 Main Street, Springfield, CA 90000",
+              description:
+                "Include your postal address. Anti-spam laws like CAN-SPAM require one in every marketing email. Markdown works here.",
+            },
+          ]}
+        />
+        <SettingsForm
+          settings={settings}
+          title="Public URL"
+          description="Where this Sendr is reachable. Unsubscribe links and the SES events endpoint use it."
+          fields={[
+            {
+              name: "publicUrl",
+              label: "Public URL",
+              type: "url",
+              placeholder: "https://sendr.acme.com",
+            },
+          ]}
+        />
+        <ApiKeysSection />
+        <SesEventsSection settings={settings} />
+        <PasskeysSection />
+      </div>
     </div>
   )
 }

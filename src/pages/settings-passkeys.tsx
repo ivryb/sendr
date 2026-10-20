@@ -1,4 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useMutation,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query"
 import { FingerprintIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -11,7 +15,7 @@ import { queries } from "@/lib/api"
 import { useAddPasskey } from "@/lib/passkeys"
 
 export function PasskeysSection() {
-  const passkeys = useQuery(queries.passkeys)
+  const passkeys = useSuspenseQuery(queries.passkeys)
   const addPasskey = useAddPasskey()
   return (
     <SettingsSection
@@ -19,7 +23,7 @@ export function PasskeysSection() {
       description="Sign in with Face ID, Touch ID, or your device PIN. Add one on each device you use. You can always sign in with an email code too."
     >
       <div className="flex flex-col gap-4">
-        {passkeys.data && passkeys.data.length > 0 && (
+        {passkeys.data.length > 0 && (
           <ul className="divide-y rounded-xl bg-card ring-1 ring-foreground/10">
             {passkeys.data.map((passkey) => (
               <PasskeyRow

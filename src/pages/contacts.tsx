@@ -1,9 +1,8 @@
-import { useState } from "react"
+import { useDeferredValue, useState } from "react"
 import {
-  keepPreviousData,
   useMutation,
-  useQuery,
   useQueryClient,
+  useSuspenseQuery,
 } from "@tanstack/react-query"
 import { SearchIcon, UsersIcon } from "lucide-react"
 import { Link } from "react-router"
@@ -11,7 +10,6 @@ import { toast } from "sonner"
 import { cn } from "cn"
 
 import { CodeBlock } from "@/components/code-block"
-import { LoadError } from "@/components/load-error"
 import { PageHeader } from "@/components/page-header"
 import {
   AlertDialog,
@@ -33,7 +31,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
-import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
   TableBody,
@@ -63,27 +60,23 @@ export function ContactsPage() {
   const [status, setStatus] = useState<ContactStatus | undefined>()
   const [offset, setOffset] = useState(0)
   const q = useDebounced(search.trim())
-  const contacts = useQuery({
-    ...queries.contacts({
-      q: q || undefined,
-      status,
+  // Deferred, so a new filter keeps showing the current rows until its own have loaded.
+  const shownQ = useDeferredValue(q)
+  const shownStatus = useDeferredValue(status)
+  const shownOffset = useDeferredValue(offset)
+  const updating =
+    q !== shownQ || status !== shownStatus || offset !== shownOffset
+  const contacts = useSuspenseQuery(
+    queries.contacts({
+      q: shownQ || undefined,
+      status: shownStatus,
       limit: CONTACTS_PAGE_SIZE,
-      offset,
-    }),
-    placeholderData: keepPreviousData,
-  })
-  const counts = contacts.data?.counts ?? {}
+      offset: shownOffset,
+    })
+  ).data
+  const counts = contacts.counts
   const everyone = Object.values(counts).reduce((sum, n) => sum + (n ?? 0), 0)
 
-  if (contacts.isPending) return <ContactsSkeleton />
-  if (contacts.isError) {
-    return (
-      <div className="flex flex-col gap-8">
-        <PageHeader title="Contacts" />
-        <LoadError query={contacts} />
-      </div>
-    )
-  }
   if (everyone === 0) {
     return (
       <div className="flex flex-col gap-8">
@@ -105,8 +98,7 @@ export function ContactsPage() {
       count: counts[value] ?? 0,
     })),
   ]
-  const total = contacts.data?.total ?? 0
-  const rows = contacts.data?.contacts ?? []
+  const { total, contacts: rows } = contacts
 
   return (
     <div className="flex flex-col gap-6">
@@ -153,7 +145,12 @@ export function ContactsPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
+      <div
+        className={cn(
+          "overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 transition-opacity",
+          updating && "opacity-60"
+        )}
+      >
         <Table>
           <TableHeader>
             <TableRow>
@@ -190,8 +187,8 @@ export function ContactsPage() {
       {total > CONTACTS_PAGE_SIZE && (
         <div className="flex items-center justify-between gap-4 text-sm text-muted-foreground">
           <span className="tabular-nums">
-            {formatNumber(offset + 1)} to{" "}
-            {formatNumber(Math.min(offset + CONTACTS_PAGE_SIZE, total))} of{" "}
+            {formatNumber(shownOffset + 1)} to{" "}
+            {formatNumber(Math.min(shownOffset + CONTACTS_PAGE_SIZE, total))} of{" "}
             {formatNumber(total)}
           </span>
           <div className="flex gap-2">
@@ -315,8 +312,8 @@ function StatusAction({ contact }: { contact: Contact }) {
 }
 
 function ConnectContacts() {
-  const settings = useQuery(queries.settings).data
-  const origin = settings?.publicUrl || window.location.origin
+  const settings = useSuspenseQuery(queries.settings).data
+  const origin = settings.publicUrl || window.location.origin
   const single = `curl -X PUT ${origin}/api/v1/contacts/user_123 \\
   -H "Authorization: Bearer <api key>" \\
   -H "Content-Type: application/json" \\
@@ -359,15 +356,5 @@ function ConnectContacts() {
         </div>
       </EmptyContent>
     </Empty>
-  )
-}
-
-function ContactsSkeleton() {
-  return (
-    <div className="flex flex-col gap-6">
-      <Skeleton className="h-8 w-40" />
-      <Skeleton className="h-9 w-full" />
-      <Skeleton className="h-80 w-full" />
-    </div>
   )
 }

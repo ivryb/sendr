@@ -432,9 +432,12 @@ function DraftMenu({ id }: { id: string }) {
   const [confirming, setConfirming] = useState(false)
   const remove = useMutation({
     mutationFn: () => api(`/api/admin/campaigns/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queries.campaigns.queryKey })
-      navigate("/campaigns")
+    onSuccess: async () => {
+      // The list loader serves the cache, so drop the draft from it before going there.
+      queryClient.setQueryData(queries.campaigns.queryKey, (campaigns) =>
+        campaigns?.filter((campaign) => campaign.id !== id)
+      )
+      await navigate("/campaigns")
       queryClient.removeQueries({ queryKey: queries.campaign(id).queryKey })
       toast.success("Draft deleted")
     },

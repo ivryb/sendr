@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { FingerprintIcon, MailIcon } from "lucide-react"
 import { REGEXP_ONLY_DIGITS } from "input-otp"
+import { useRevalidator } from "react-router"
 
 import { AuthLayout } from "@/components/auth-layout"
 import { Button } from "@/components/ui/button"
@@ -29,11 +30,15 @@ export function SignInPage({ firstSignIn }: { firstSignIn: boolean }) {
     firstSignIn ? { name: "email" } : { name: "choose" }
   )
   const queryClient = useQueryClient()
-  const signedIn = () =>
-    Promise.all([
+  const revalidator = useRevalidator()
+  const signedIn = async () => {
+    // Load the page behind sign-in first, so it appears complete once `me` flips.
+    await revalidator.revalidate()
+    await Promise.all([
       queryClient.invalidateQueries({ queryKey: queries.me.queryKey }),
       queryClient.invalidateQueries({ queryKey: queries.setup.queryKey }),
     ])
+  }
   // Admins who sign in with a code are offered a passkey until they have one.
   const signedInWithCode = async () => {
     // The code is spent by now, so a failed lookup must still let the admin in.

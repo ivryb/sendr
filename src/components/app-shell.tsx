@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   ChevronsUpDownIcon,
@@ -7,7 +8,7 @@ import {
   SettingsIcon,
   UsersIcon,
 } from "lucide-react"
-import { Link, NavLink, Outlet, useMatch } from "react-router"
+import { Link, NavLink, Outlet, useMatch, useNavigation } from "react-router"
 
 import { Logo } from "@/components/logo"
 import {
@@ -43,6 +44,7 @@ const NAV = [
 export function AppShell() {
   return (
     <SidebarProvider>
+      <NavigationProgress />
       <Sidebar variant="inset">
         <SidebarHeader>
           <Link to="/campaigns" aria-label="Sendr home" className="px-2 py-1.5">
@@ -70,10 +72,21 @@ export function AppShell() {
           </Link>
         </header>
         <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-6 sm:px-8 sm:py-10">
-          <Outlet />
+          {/* Loaders fill the cache before a page renders, so this never shows in practice. */}
+          <Suspense>
+            <Outlet />
+          </Suspense>
         </div>
       </SidebarInset>
     </SidebarProvider>
+  )
+}
+
+/** A thin bar at the top while the next page loads; only slow loads show it. */
+function NavigationProgress() {
+  if (useNavigation().state === "idle") return null
+  return (
+    <div className="nav-progress fixed inset-x-0 top-0 z-50 h-0.5 bg-primary" />
   )
 }
 
