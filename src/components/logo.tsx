@@ -11,7 +11,7 @@ export function Logo({
     <span
       className={cn("inline-flex items-center gap-2 font-semibold", className)}
     >
-      <span className="grid size-7 place-items-center rounded-lg bg-primary text-primary-foreground">
+      <span className="grid size-7 place-items-center rounded-[7px] bg-primary text-primary-foreground">
         <FilledMailIcon className="size-[18px]" />
       </span>
       <span className={cn("tracking-tight", nameClassName)}>Sendr</span>
