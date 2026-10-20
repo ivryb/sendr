@@ -1,9 +1,4 @@
 import { useState, type FormEvent } from "react"
-import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query"
 import { KeyRoundIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -31,21 +26,21 @@ import {
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
-import { api, queries } from "@/lib/api"
-import { formatDate } from "@/lib/format"
+import { api } from "@/lib/api"
+import { useDates } from "@/lib/format"
+import { useChange } from "@/lib/mutations"
 import type { ApiKey } from "../../shared/model"
 
-export function ApiKeysSection() {
-  const keys = useSuspenseQuery(queries.apiKeys)
+export function ApiKeysSection({ apiKeys }: { apiKeys: ApiKey[] }) {
   return (
     <SettingsSection
       title="API keys"
       description="Your app uses a key to add, update and remove contacts. Make one per app so you can revoke them separately."
     >
       <div className="flex flex-col gap-4">
-        {keys.data.length > 0 && (
+        {apiKeys.length > 0 && (
           <ul className="divide-y rounded-xl bg-card ring-1 ring-foreground/10">
-            {keys.data.map((key) => (
+            {apiKeys.map((key) => (
               <ApiKeyRow key={key.id} apiKey={key} />
             ))}
           </ul>
@@ -57,14 +52,13 @@ export function ApiKeysSection() {
 }
 
 function ApiKeyRow({ apiKey }: { apiKey: ApiKey }) {
-  const queryClient = useQueryClient()
+  const { formatDate } = useDates()
   const [open, setOpen] = useState(false)
-  const revoke = useMutation({
+  const revoke = useChange({
     mutationFn: () =>
       api(`/api/admin/api-keys/${apiKey.id}`, { method: "DELETE" }),
     onSuccess: () => {
       setOpen(false)
-      queryClient.invalidateQueries({ queryKey: queries.apiKeys.queryKey })
       toast.success(`${apiKey.name} revoked`)
     },
   })
@@ -109,13 +103,10 @@ function ApiKeyRow({ apiKey }: { apiKey: ApiKey }) {
 }
 
 function CreateKeyDialog() {
-  const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
-  const create = useMutation({
+  const create = useChange({
     mutationFn: (name: string) =>
       api<{ key: string }>("/api/admin/api-keys", { body: { name } }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: queries.apiKeys.queryKey }),
   })
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()

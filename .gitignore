@@ -26,3 +26,7 @@ dist-ssr
 # Cloudflare
 .dev.vars
 .wrangler
+
+# React Router
+/build
+.react-router

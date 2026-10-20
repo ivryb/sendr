@@ -1,11 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react"
-import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query"
 import { toast } from "sonner"
 
+import type { Route } from "./+types/settings"
 import { CopyField } from "@/components/copy-button"
 import { PageHeader } from "@/components/page-header"
 import { SettingsSection } from "@/components/settings-section"
@@ -20,10 +16,24 @@ import {
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
-import { api, ApiError, queries } from "@/lib/api"
+import { adminContext } from "@/lib/admin.server"
+import { api, ApiError } from "@/lib/api"
+import { useChange } from "@/lib/mutations"
 import { ApiKeysSection } from "@/pages/settings-api-keys"
 import { PasskeysSection } from "@/pages/settings-passkeys"
 import type { Settings } from "../../shared/model"
+import { listPasskeys } from "../../worker/auth"
+import { listApiKeys } from "../../worker/domain/apiKeys"
+import { getSettings, toSettingsDto } from "../../worker/lib/settings"
+
+export async function loader({ context }: Route.LoaderArgs) {
+  const [settings, apiKeys, passkeys] = await Promise.all([
+    getSettings(),
+    listApiKeys(),
+    listPasskeys(context.get(adminContext).id),
+  ])
+  return { settings: toSettingsDto(settings), apiKeys, passkeys }
+}
 
 type EditableKey = Exclude<keyof Settings, "webhookSecret">
 
@@ -38,8 +48,8 @@ type FieldConfig = {
   multiline?: boolean
 }
 
-export function SettingsPage() {
-  const settings = useSuspenseQuery(queries.settings).data
+export default function SettingsPage({ loaderData }: Route.ComponentProps) {
+  const { settings, apiKeys, passkeys } = loaderData
   return (
     <div className="flex flex-col gap-2">
       <PageHeader title="Settings" />
@@ -94,9 +104,9 @@ export function SettingsPage() {
             },
           ]}
         />
-        <ApiKeysSection />
+        <ApiKeysSection apiKeys={apiKeys} />
         <SesEventsSection settings={settings} />
-        <PasskeysSection />
+        <PasskeysSection passkeys={passkeys} />
       </div>
     </div>
   )
@@ -113,15 +123,13 @@ function SettingsForm({
   description: string
   fields: FieldConfig[]
 }) {
-  const queryClient = useQueryClient()
   const pick = (from: Settings): Values =>
     Object.fromEntries(fields.map((field) => [field.name, from[field.name]]))
   const [values, setValues] = useState(() => pick(settings))
-  const save = useMutation({
+  const save = useChange({
     mutationFn: (body: Values) =>
       api<Settings>("/api/admin/settings", { method: "PUT", body }),
     onSuccess: (next) => {
-      queryClient.setQueryData(queries.settings.queryKey, next)
       setValues(pick(next))
       toast.success(`${title} saved`)
     },

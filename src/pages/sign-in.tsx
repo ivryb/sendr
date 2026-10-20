@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation } from "@tanstack/react-query"
 import { FingerprintIcon, MailIcon } from "lucide-react"
 import { REGEXP_ONLY_DIGITS } from "input-otp"
-import { useRevalidator } from "react-router"
+import { redirect, useNavigate } from "react-router"
 
+import type { Route } from "./+types/sign-in"
 import { AuthLayout } from "@/components/auth-layout"
 import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
@@ -14,9 +15,29 @@ import {
   InputOTPSlot,
 } from "@/components/ui/input-otp"
 import { Spinner } from "@/components/ui/spinner"
-import { queries } from "@/lib/api"
+import { api } from "@/lib/api"
 import { authClient, unwrap } from "@/lib/auth-client"
 import { useAddPasskey } from "@/lib/passkeys"
+import { getAdmin, isClaimed } from "../../worker/auth"
+
+export async function loader({ request, url }: Route.LoaderArgs) {
+  const next = safeNext(url.searchParams.get("next"), url)
+  if (await getAdmin(request)) throw redirect(next)
+  // Nobody has signed in yet, so there are no passkeys to offer.
+  return { firstSignIn: !(await isClaimed()), next }
+}
+
+/**
+ * Only pages on this site, so a crafted link can't send the admin elsewhere. Resolving the
+ * URL first catches tricks browsers read as `//evil.com`, like `/\\evil.com` or `/.//evil.com`.
+ */
+function safeNext(next: string | null, here: URL) {
+  const target = new URL(next ?? "/campaigns", here)
+  const path = target.pathname + target.search
+  return target.origin === here.origin && !path.startsWith("//")
+    ? path
+    : "/campaigns"
+}
 
 type Step =
   | { name: "choose" }
@@ -24,27 +45,19 @@ type Step =
   | { name: "code"; email: string }
   | { name: "passkey" }
 
-/** `firstSignIn`: nobody has signed in yet, so there are no passkeys to offer. */
-export function SignInPage({ firstSignIn }: { firstSignIn: boolean }) {
+export default function SignInPage({ loaderData }: Route.ComponentProps) {
+  const { firstSignIn, next } = loaderData
   const [step, setStep] = useState<Step>(
     firstSignIn ? { name: "email" } : { name: "choose" }
   )
-  const queryClient = useQueryClient()
-  const revalidator = useRevalidator()
-  const signedIn = async () => {
-    // Load the page behind sign-in first, so it appears complete once `me` flips.
-    await revalidator.revalidate()
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: queries.me.queryKey }),
-      queryClient.invalidateQueries({ queryKey: queries.setup.queryKey }),
-    ])
-  }
+  const navigate = useNavigate()
+  const signedIn = () => navigate(next, { replace: true })
   // Admins who sign in with a code are offered a passkey until they have one.
   const signedInWithCode = async () => {
     // The code is spent by now, so a failed lookup must still let the admin in.
-    const passkeys = await queryClient
-      .fetchQuery(queries.passkeys)
-      .catch(() => null)
+    const passkeys = await api<unknown[]>(
+      "/api/auth/passkey/list-user-passkeys"
+    ).catch(() => null)
     if (passkeys?.length === 0) setStep({ name: "passkey" })
     else await signedIn()
   }

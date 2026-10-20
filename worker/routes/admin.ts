@@ -2,7 +2,7 @@ import { Hono } from "hono"
 import { z } from "zod"
 
 import { CONTACT_STATUSES } from "../../shared/model"
-import { createAuth } from "../auth"
+import { getAdmin, type Admin } from "../auth"
 import { createApiKey, deleteApiKey, listApiKeys } from "../domain/apiKeys"
 import {
   approveCampaign,
@@ -37,15 +37,14 @@ const settingsInput = z
   })
   .partial()
 
-type AdminEnv = { Variables: { user: { id: string; email: string; name: string } } }
+type AdminEnv = { Variables: { user: Admin } }
 
 /** The admin app's API. Every route requires a signed-in admin. */
 export const adminApi = new Hono<AdminEnv>()
   .use(async (c, next) => {
-    const auth = createAuth(await getSettings(), c.req.url)
-    const session = await auth.api.getSession({ headers: c.req.raw.headers })
-    if (!session) return c.json({ error: "unauthorized" }, 401)
-    c.set("user", session.user)
+    const admin = await getAdmin(c.req.raw)
+    if (!admin) return c.json({ error: "unauthorized" }, 401)
+    c.set("user", admin)
     await next()
   })
   .get("/me", (c) => c.json({ user: c.get("user") }))

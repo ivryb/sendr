@@ -1,13 +1,10 @@
-import { useDeferredValue, useState } from "react"
-import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query"
+import { useEffect, useRef, useState } from "react"
 import { SearchIcon, UsersIcon } from "lucide-react"
-import { Link } from "react-router"
+import { Link, useNavigation, useSearchParams } from "react-router"
 import { toast } from "sonner"
 import { cn } from "cn"
+
+import type { Route } from "./+types/contacts"
 
 import { CodeBlock } from "@/components/code-block"
 import { PageHeader } from "@/components/page-header"
@@ -39,14 +36,34 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { api, CONTACTS_PAGE_SIZE, queries } from "@/lib/api"
-import { formatDate, formatNumber } from "@/lib/format"
-import { useDebounced } from "@/lib/use-debounced"
+import { api } from "@/lib/api"
+import { formatNumber, useDates } from "@/lib/format"
+import { useChange } from "@/lib/mutations"
 import {
   CONTACT_STATUSES,
   type Contact,
   type ContactStatus,
 } from "../../shared/model"
+import { contactCounts, listContacts } from "../../worker/domain/contacts"
+import { getSettings } from "../../worker/lib/settings"
+
+const PAGE_SIZE = 50
+
+/** The search, status filter and page live in the URL, so each view can be linked and reloaded. */
+export async function loader({ url }: Route.LoaderArgs) {
+  const params = url.searchParams
+  const filter = {
+    q: params.get("q")?.trim() || undefined,
+    status: CONTACT_STATUSES.find((status) => status === params.get("status")),
+    offset: Math.max(0, Number(params.get("offset")) || 0),
+  }
+  const [list, counts, settings] = await Promise.all([
+    listContacts({ ...filter, limit: PAGE_SIZE }),
+    contactCounts() as Promise<Partial<Record<ContactStatus, number>>>,
+    getSettings(),
+  ])
+  return { ...list, counts, filter, origin: settings.publicUrl || url.origin }
+}
 
 const CONTACT_STATUS: Record<ContactStatus, { label: string; dot: string }> = {
   subscribed: { label: "Subscribed", dot: "bg-emerald-500" },
@@ -55,33 +72,38 @@ const CONTACT_STATUS: Record<ContactStatus, { label: string; dot: string }> = {
   complained: { label: "Complained", dot: "bg-red-500" },
 }
 
-export function ContactsPage() {
-  const [search, setSearch] = useState("")
-  const [status, setStatus] = useState<ContactStatus | undefined>()
-  const [offset, setOffset] = useState(0)
-  const q = useDebounced(search.trim())
-  // Deferred, so a new filter keeps showing the current rows until its own have loaded.
-  const shownQ = useDeferredValue(q)
-  const shownStatus = useDeferredValue(status)
-  const shownOffset = useDeferredValue(offset)
-  const updating =
-    q !== shownQ || status !== shownStatus || offset !== shownOffset
-  const contacts = useSuspenseQuery(
-    queries.contacts({
-      q: shownQ || undefined,
-      status: shownStatus,
-      limit: CONTACTS_PAGE_SIZE,
-      offset: shownOffset,
-    })
-  ).data
-  const counts = contacts.counts
+export default function ContactsPage({ loaderData }: Route.ComponentProps) {
+  const { contacts: rows, total, counts, filter, origin } = loaderData
+  const [, setSearchParams] = useSearchParams()
+  // A new filter keeps the current rows, dimmed, until its own have loaded.
+  const updating = useNavigation().location?.pathname === "/contacts"
+  const show = (patch: Partial<typeof filter>) => {
+    const next = { ...filter, offset: 0, ...patch }
+    const params = new URLSearchParams()
+    if (next.q) params.set("q", next.q)
+    if (next.status) params.set("status", next.status)
+    if (next.offset) params.set("offset", String(next.offset))
+    setSearchParams(params, { replace: true, preventScrollReset: true })
+  }
+  const [search, setSearch] = useState(filter.q ?? "")
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const changeSearch = (value: string) => {
+    setSearch(value)
+    clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(
+      () => show({ q: value.trim() || undefined }),
+      300
+    )
+  }
+  // A search still waiting to run must not pull the admin back here after they leave.
+  useEffect(() => () => clearTimeout(searchTimer.current), [])
   const everyone = Object.values(counts).reduce((sum, n) => sum + (n ?? 0), 0)
 
   if (everyone === 0) {
     return (
       <div className="flex flex-col gap-8">
         <PageHeader title="Contacts" />
-        <ConnectContacts />
+        <ConnectContacts origin={origin} />
       </div>
     )
   }
@@ -98,7 +120,6 @@ export function ContactsPage() {
       count: counts[value] ?? 0,
     })),
   ]
-  const { total, contacts: rows } = contacts
 
   return (
     <div className="flex flex-col gap-6">
@@ -108,23 +129,20 @@ export function ContactsPage() {
       />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="-mx-4 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-          {filters.map((filter) => (
+          {filters.map((option) => (
             <button
-              key={filter.label}
+              key={option.label}
               type="button"
-              onClick={() => {
-                setStatus(filter.value)
-                setOffset(0)
-              }}
+              onClick={() => show({ status: option.value })}
               className={cn(
                 "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground",
-                status === filter.value &&
+                filter.status === option.value &&
                   "bg-muted font-medium text-foreground"
               )}
             >
-              {filter.label}
+              {option.label}
               <span className="text-xs tabular-nums opacity-70">
-                {formatNumber(filter.count)}
+                {formatNumber(option.count)}
               </span>
             </button>
           ))}
@@ -134,10 +152,7 @@ export function ContactsPage() {
           <Input
             type="search"
             value={search}
-            onChange={(event) => {
-              setSearch(event.target.value)
-              setOffset(0)
-            }}
+            onChange={(event) => changeSearch(event.target.value)}
             placeholder="Search email or name"
             aria-label="Search contacts"
             className="pl-8"
@@ -184,20 +199,20 @@ export function ContactsPage() {
         </Table>
       </div>
 
-      {total > CONTACTS_PAGE_SIZE && (
+      {total > PAGE_SIZE && (
         <div className="flex items-center justify-between gap-4 text-sm text-muted-foreground">
           <span className="tabular-nums">
-            {formatNumber(shownOffset + 1)} to{" "}
-            {formatNumber(Math.min(shownOffset + CONTACTS_PAGE_SIZE, total))} of{" "}
+            {formatNumber(filter.offset + 1)} to{" "}
+            {formatNumber(Math.min(filter.offset + PAGE_SIZE, total))} of{" "}
             {formatNumber(total)}
           </span>
           <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
-              disabled={offset === 0}
+              disabled={filter.offset === 0}
               onClick={() =>
-                setOffset(Math.max(0, offset - CONTACTS_PAGE_SIZE))
+                show({ offset: Math.max(0, filter.offset - PAGE_SIZE) })
               }
             >
               Previous
@@ -205,8 +220,8 @@ export function ContactsPage() {
             <Button
               variant="outline"
               size="sm"
-              disabled={offset + CONTACTS_PAGE_SIZE >= total}
-              onClick={() => setOffset(offset + CONTACTS_PAGE_SIZE)}
+              disabled={filter.offset + PAGE_SIZE >= total}
+              onClick={() => show({ offset: filter.offset + PAGE_SIZE })}
             >
               Next
             </Button>
@@ -218,6 +233,7 @@ export function ContactsPage() {
 }
 
 function ContactRow({ contact }: { contact: Contact }) {
+  const { formatDate } = useDates()
   const meta = CONTACT_STATUS[contact.status]
   return (
     <TableRow>
@@ -255,14 +271,12 @@ function ContactRow({ contact }: { contact: Contact }) {
 }
 
 function StatusAction({ contact }: { contact: Contact }) {
-  const queryClient = useQueryClient()
   const [confirming, setConfirming] = useState(false)
-  const change = useMutation({
+  const change = useChange({
     mutationFn: (status: "subscribed" | "unsubscribed") =>
       api(`/api/admin/contacts/${contact.id}/status`, { body: { status } }),
     onSuccess: (_, status) => {
       setConfirming(false)
-      queryClient.invalidateQueries({ queryKey: ["contacts"] })
       toast.success(
         status === "subscribed"
           ? `${contact.email} is subscribed again`
@@ -311,9 +325,7 @@ function StatusAction({ contact }: { contact: Contact }) {
   )
 }
 
-function ConnectContacts() {
-  const settings = useSuspenseQuery(queries.settings).data
-  const origin = settings.publicUrl || window.location.origin
+function ConnectContacts({ origin }: { origin: string }) {
   const single = `curl -X PUT ${origin}/api/v1/contacts/user_123 \\
   -H "Authorization: Bearer <api key>" \\
   -H "Content-Type: application/json" \\

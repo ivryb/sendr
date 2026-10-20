@@ -1,15 +1,3 @@
-import type { Passkey } from "@better-auth/passkey"
-import { queryOptions } from "@tanstack/react-query"
-
-import type {
-  ApiKey,
-  Campaign,
-  Contact,
-  ContactStatus,
-  Settings,
-} from "../../shared/model"
-import { appFetch } from "@/lib/ssr"
-
 type Issue = { path: PropertyKey[]; message: string }
 
 /** Any non-2xx response. `message` is safe to show; `issues` holds per-field validation errors. */
@@ -32,7 +20,7 @@ export async function api<T>(
   path: string,
   init: { method?: string; body?: unknown } = {}
 ): Promise<T> {
-  const response = await appFetch(path, {
+  const response = await fetch(path, {
     method: init.method ?? (init.body === undefined ? "GET" : "POST"),
     headers:
       init.body === undefined ? {} : { "content-type": "application/json" },
@@ -54,87 +42,3 @@ function fallbackMessage(status: number) {
   if (status === 400) return "Some fields need attention."
   return "Something went wrong. Try again in a moment."
 }
-
-export type User = { id: string; email: string; name: string }
-
-export const CONTACTS_PAGE_SIZE = 50
-
-export type PasskeySummary = Pick<Passkey, "id" | "name"> & {
-  createdAt: string
-}
-
-export type ContactsQuery = {
-  q?: string
-  status?: ContactStatus
-  limit: number
-  offset: number
-}
-
-export type ContactsPage = {
-  contacts: Contact[]
-  total: number
-  counts: Partial<Record<ContactStatus, number>>
-}
-
-export const queries = {
-  // The app can't render anything until these two answer, so they ride out network blips.
-  setup: queryOptions({
-    queryKey: ["setup"],
-    queryFn: () => api<{ claimed: boolean }>("/api/setup"),
-    retry: 2,
-  }),
-  me: queryOptions({
-    queryKey: ["me"],
-    queryFn: async () => {
-      try {
-        return (await api<{ user: User }>("/api/admin/me")).user
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 401) return null
-        throw error
-      }
-    },
-    retry: 2,
-  }),
-  settings: queryOptions({
-    queryKey: ["settings"],
-    queryFn: () => api<Settings>("/api/admin/settings"),
-  }),
-  apiKeys: queryOptions({
-    queryKey: ["api-keys"],
-    queryFn: async () =>
-      (await api<{ apiKeys: ApiKey[] }>("/api/admin/api-keys")).apiKeys,
-  }),
-  contacts: (query: ContactsQuery) =>
-    queryOptions({
-      queryKey: ["contacts", query],
-      queryFn: () => {
-        const params = new URLSearchParams({
-          limit: String(query.limit),
-          offset: String(query.offset),
-        })
-        if (query.q) params.set("q", query.q)
-        if (query.status) params.set("status", query.status)
-        return api<ContactsPage>(`/api/admin/contacts?${params}`)
-      },
-    }),
-  passkeys: queryOptions({
-    queryKey: ["passkeys"],
-    queryFn: () =>
-      api<PasskeySummary[]>("/api/auth/passkey/list-user-passkeys"),
-  }),
-  campaigns: queryOptions({
-    queryKey: ["campaigns"],
-    queryFn: async () =>
-      (await api<{ campaigns: Campaign[] }>("/api/admin/campaigns")).campaigns,
-  }),
-  campaign: (id: string) =>
-    queryOptions({
-      queryKey: ["campaigns", id],
-      queryFn: async () =>
-        (await api<{ campaign: Campaign }>(`/api/admin/campaigns/${id}`))
-          .campaign,
-    }),
-}
-
-/** Per-status contact counts, for summaries outside the contacts page. */
-export const contactCounts = queries.contacts({ limit: 1, offset: 0 })

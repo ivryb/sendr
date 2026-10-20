@@ -1,8 +1,3 @@
-import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query"
 import { FingerprintIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -10,12 +5,14 @@ import { SettingsSection } from "@/components/settings-section"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { authClient, unwrap } from "@/lib/auth-client"
-import { formatDate } from "@/lib/format"
-import { queries } from "@/lib/api"
+import { useDates } from "@/lib/format"
+import { useChange } from "@/lib/mutations"
 import { useAddPasskey } from "@/lib/passkeys"
+import type { listPasskeys } from "../../worker/auth"
 
-export function PasskeysSection() {
-  const passkeys = useSuspenseQuery(queries.passkeys)
+type Passkeys = Awaited<ReturnType<typeof listPasskeys>>
+
+export function PasskeysSection({ passkeys }: { passkeys: Passkeys }) {
   const addPasskey = useAddPasskey()
   return (
     <SettingsSection
@@ -23,9 +20,9 @@ export function PasskeysSection() {
       description="Sign in with Face ID, Touch ID, or your device PIN. Add one on each device you use. You can always sign in with an email code too."
     >
       <div className="flex flex-col gap-4">
-        {passkeys.data.length > 0 && (
+        {passkeys.length > 0 && (
           <ul className="divide-y rounded-xl bg-card ring-1 ring-foreground/10">
-            {passkeys.data.map((passkey) => (
+            {passkeys.map((passkey) => (
               <PasskeyRow
                 key={passkey.id}
                 id={passkey.id}
@@ -56,13 +53,12 @@ function PasskeyRow({
 }: {
   id: string
   name: string
-  createdAt: string
+  createdAt: Date | null
 }) {
-  const queryClient = useQueryClient()
-  const remove = useMutation({
+  const { formatDate } = useDates()
+  const remove = useChange({
     mutationFn: () => unwrap(authClient.passkey.deletePasskey({ id })),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queries.passkeys.queryKey })
       toast.success(`${name} passkey removed`)
     },
   })
@@ -72,7 +68,7 @@ function PasskeyRow({
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-sm font-medium">{name}</span>
         <span className="text-xs text-muted-foreground">
-          Added {formatDate(createdAt)}
+          {createdAt && `Added ${formatDate(createdAt)}`}
         </span>
       </div>
       <Button

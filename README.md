@@ -89,14 +89,14 @@ Admins sign in with a passkey or a 6-digit code sent to their email. Once you sa
 ```sh
 bun install
 bun run db:migrate:local
-bun run dev          # admin app and Worker on one Vite dev server
+bun run dev          # admin app and Worker on one dev server
 bun run test         # behavior tests in the Workers runtime
 bun run typecheck
 ```
 
 Local `.dev.vars` can set `EMAIL_PROVIDER=memory`, `AUTH_EMAIL_PROVIDER=memory` and an empty `LOGIN_CODE_RELAY_URL`: emails, including login codes, are printed to the dev server log instead of being sent. After changing `worker/db/schema.ts`, run `bun run db:generate` to create a migration.
 
-The Worker lives in `worker/` (Hono routes, domain logic, providers), the admin app in `src/`, and code both use (the domain model and the email renderer) in `shared/`. `site/` is the sendr.soy Worker, run by the Sendr project rather than by each instance. A new email service only needs an `EmailProvider` adapter in `worker/email/`.
+The Worker lives in `worker/` (Hono routes, domain logic, providers). The admin app in `src/` is a React Router app: each page in `src/pages/` loads its data on the server in a `loader` and saves through the admin API. Its routes are listed in `src/routes.ts`. Code both use (the domain model and the email renderer) lives in `shared/`. `site/` is the sendr.soy Worker, run by the Sendr project rather than by each instance. A new email service only needs an `EmailProvider` adapter in `worker/email/`.
 
 ## License
 

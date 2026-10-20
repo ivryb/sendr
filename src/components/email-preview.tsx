@@ -1,11 +1,10 @@
 import { useMemo, useRef } from "react"
-import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router"
 import { cn } from "cn"
 
-import { queries } from "@/lib/api"
+import { useAdmin } from "@/components/app-shell"
 import { useDebounced } from "@/lib/use-debounced"
-import { senderAddress } from "../../shared/model"
+import { senderAddress, type Settings } from "../../shared/model"
 import { renderEmail } from "../../shared/render"
 
 /**
@@ -15,14 +14,15 @@ import { renderEmail } from "../../shared/render"
 export function EmailPreview({
   subject,
   markdown,
+  settings,
   className,
 }: {
   subject: string
   markdown: string
+  settings: Pick<Settings, "fromName" | "fromEmail" | "footer">
   className?: string
 }) {
-  const settings = useQuery(queries.settings).data
-  const me = useQuery(queries.me).data
+  const me = useAdmin()
   const debouncedSubject = useDebounced(subject)
   const debouncedMarkdown = useDebounced(markdown)
   const email = useMemo(
@@ -30,13 +30,13 @@ export function EmailPreview({
       renderEmail({
         subject: debouncedSubject,
         markdown: debouncedMarkdown,
-        footer: settings?.footer ?? "",
-        recipient: { firstName: me?.name.split(" ")[0] ?? null, fields: {} },
+        footer: settings.footer,
+        recipient: { firstName: me.name.split(" ")[0] || null, fields: {} },
         unsubscribeUrl: "#",
       }),
-    [debouncedSubject, debouncedMarkdown, settings?.footer, me?.name]
+    [debouncedSubject, debouncedMarkdown, settings.footer, me.name]
   )
-  const from = settings?.fromEmail ? senderAddress(settings) : null
+  const from = settings.fromEmail ? senderAddress(settings) : null
   // A new srcDoc reloads the frame at the top; keep the reader where they were.
   const frame = useRef<HTMLIFrameElement>(null)
   const scrollY = useRef(0)

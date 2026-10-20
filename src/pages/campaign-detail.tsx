@@ -1,5 +1,4 @@
 import { useState } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   CheckIcon,
   CircleAlertIcon,
@@ -25,24 +24,21 @@ import {
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Spinner } from "@/components/ui/spinner"
-import { api, queries } from "@/lib/api"
+import { api } from "@/lib/api"
 import {
   CAMPAIGN_STAGES,
   DELIVERY_LABELS,
   RATE_LIMITS,
   deliveryStats,
 } from "@/lib/campaign"
-import {
-  formatDateTime,
-  formatNumber,
-  formatPercent,
-  plural,
-} from "@/lib/format"
+import { formatNumber, formatPercent, plural, useDates } from "@/lib/format"
+import { useChange } from "@/lib/mutations"
 import {
   CAMPAIGN_ACTIONS,
   type Campaign,
   type CampaignAction,
   type DeliveryStatus,
+  type Settings,
 } from "../../shared/model"
 
 type RunAction = Exclude<CampaignAction, "start">
@@ -84,7 +80,14 @@ const COUNT_CARDS: DeliveryStatus[] = [
   "queued",
 ]
 
-export function CampaignDetail({ campaign }: { campaign: Campaign }) {
+export function CampaignDetail({
+  campaign,
+  settings,
+}: {
+  campaign: Campaign
+  settings: Pick<Settings, "fromName" | "fromEmail" | "footer">
+}) {
+  const { formatDateTime } = useDates()
   const actions = CAMPAIGN_ACTIONS[campaign.status].filter(
     (action): action is RunAction => action !== "start"
   )
@@ -152,6 +155,7 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
         <EmailPreview
           subject={campaign.subject}
           markdown={campaign.markdown}
+          settings={settings}
           className="h-[36rem]"
         />
       </section>
@@ -350,22 +354,14 @@ function ActionButton({
   campaign: Campaign
 }) {
   const config = ACTIONS[action]
-  const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
-  const run = useMutation({
+  const run = useChange({
     mutationFn: () =>
       api<{ campaign: Campaign }>(
         `/api/admin/campaigns/${campaign.id}/${action}`,
         { body: {} }
       ),
-    onSuccess: (result) => {
-      setOpen(false)
-      queryClient.setQueryData(
-        queries.campaign(campaign.id).queryKey,
-        result.campaign
-      )
-      queryClient.invalidateQueries({ queryKey: queries.campaigns.queryKey })
-    },
+    onSuccess: () => setOpen(false),
   })
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>

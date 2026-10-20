@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation } from "@tanstack/react-query"
 import {
   CheckIcon,
   EllipsisIcon,
@@ -8,10 +8,11 @@ import {
   Trash2Icon,
   TriangleAlertIcon,
 } from "lucide-react"
-import { useNavigate } from "react-router"
+import { useNavigate, useRevalidator } from "react-router"
 import { toast } from "sonner"
 import { cn } from "cn"
 
+import { useAdmin } from "@/components/app-shell"
 import { BackToCampaigns } from "@/components/back-link"
 import { EmailPreview } from "@/components/email-preview"
 import { Button } from "@/components/ui/button"
@@ -35,15 +36,24 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { api, contactCounts, queries } from "@/lib/api"
+import { api } from "@/lib/api"
 import { formatNumber, plural } from "@/lib/format"
-import type { Campaign } from "../../shared/model"
+import { useChange } from "@/lib/mutations"
+import type { Campaign, Settings } from "../../shared/model"
 
 type Draft = Pick<Campaign, "subject" | "markdown" | "firstBatchSize">
 
 const MERGE_TAGS = ["{{first_name|there}}", "{{fields.name|fallback}}"]
 
-export function CampaignEditor({ campaign }: { campaign: Campaign }) {
+export function CampaignEditor({
+  campaign,
+  settings,
+  subscribed,
+}: {
+  campaign: Campaign
+  settings: Pick<Settings, "fromName" | "fromEmail" | "footer">
+  subscribed: number
+}) {
   const autosave = useAutosave(campaign)
   const { draft, update } = autosave
   const [tab, setTab] = useState<"write" | "preview">("write")
@@ -71,6 +81,7 @@ export function CampaignEditor({ campaign }: { campaign: Campaign }) {
           <StartButton
             campaign={campaign}
             draft={draft}
+            subscribed={subscribed}
             flush={autosave.flush}
           />
           <DraftMenu id={campaign.id} />
@@ -149,6 +160,7 @@ export function CampaignEditor({ campaign }: { campaign: Campaign }) {
         <EmailPreview
           subject={draft.subject}
           markdown={draft.markdown}
+          settings={settings}
           className={cn(
             "h-[max(26rem,calc(100svh-22rem))]",
             tab !== "preview" && "hidden lg:flex"
@@ -164,20 +176,14 @@ export function CampaignEditor({ campaign }: { campaign: Campaign }) {
  * `flush` saves immediately, for actions that need the server copy to be current.
  */
 function useAutosave(campaign: Campaign) {
-  const queryClient = useQueryClient()
+  const { revalidate } = useRevalidator()
   const [draft, setDraft] = useState<Draft>(() => pickDraft(campaign))
   const [saved, setSaved] = useState<Draft>(draft)
   const path = `/api/admin/campaigns/${campaign.id}`
   const save = useMutation({
     mutationFn: (values: Draft) =>
       api<{ campaign: Campaign }>(path, { method: "PUT", body: values }),
-    onSuccess: (result, values) => {
-      setSaved(values)
-      queryClient.setQueryData(
-        queries.campaign(campaign.id).queryKey,
-        result.campaign
-      )
-    },
+    onSuccess: (_, values) => setSaved(values),
     meta: { silent: true },
   })
   const dirty = !sameDraft(draft, saved)
@@ -198,20 +204,12 @@ function useAutosave(campaign: Campaign) {
     () => () => {
       const edits = pending.current
       if (!edits) return
-      // Reopening the editor reads the cache, so it must hold the last keystrokes too.
-      queryClient.setQueryData(
-        queries.campaign(campaign.id).queryKey,
-        (cached) => cached && { ...cached, ...edits }
-      )
+      // The next page loaded before this save, so it reloads to show the edits.
       api(path, { method: "PUT", body: edits })
-        .then(() =>
-          queryClient.invalidateQueries({
-            queryKey: queries.campaigns.queryKey,
-          })
-        )
+        .then(() => revalidate())
         .catch(() => {})
     },
-    [path, campaign.id, queryClient]
+    [path, revalidate]
   )
 
   return {
@@ -322,13 +320,13 @@ function SendTestButton({
   id: string
   flush: () => Promise<void>
 }) {
-  const me = useQuery(queries.me).data
+  const me = useAdmin()
   const send = useMutation({
     mutationFn: async () => {
       await flush()
       await api(`/api/admin/campaigns/${id}/test`, { body: {} })
     },
-    onSuccess: () => toast.success(`Test sent to ${me?.email}`),
+    onSuccess: () => toast.success(`Test sent to ${me.email}`),
   })
   return (
     <Button
@@ -346,17 +344,16 @@ function SendTestButton({
 function StartButton({
   campaign,
   draft,
+  subscribed,
   flush,
 }: {
   campaign: Campaign
   draft: Draft
+  subscribed: number
   flush: () => Promise<void>
 }) {
-  const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
-  const subscribed = useQuery({ ...contactCounts, enabled: open }).data?.counts
-    .subscribed
-  const start = useMutation({
+  const start = useChange({
     mutationFn: async () => {
       await flush()
       return api<{ campaign: Campaign }>(
@@ -364,25 +361,16 @@ function StartButton({
         { body: {} }
       )
     },
-    onSuccess: (result) => {
-      setOpen(false)
-      queryClient.setQueryData(
-        queries.campaign(campaign.id).queryKey,
-        result.campaign
-      )
-      queryClient.invalidateQueries({ queryKey: queries.campaigns.queryKey })
-    },
+    onSuccess: () => setOpen(false),
     meta: { silent: true },
   })
   const batch = draft.firstBatchSize
   const audience =
-    subscribed === undefined
-      ? null
-      : subscribed === 0
-        ? "You don't have any subscribed contacts yet. Connect your contacts first."
-        : subscribed <= batch
-          ? `Sendr sends it to all ${plural(subscribed, "subscribed contact")} at once. That fits in one batch, so there's no review pause.`
-          : `Sendr sends it to the first ${formatNumber(batch)} of your ${plural(subscribed, "subscribed contact")}, then stops so you can check bounces and complaints. Everyone else gets it after you approve.`
+    subscribed === 0
+      ? "You don't have any subscribed contacts yet. Connect your contacts first."
+      : subscribed <= batch
+        ? `Sendr sends it to all ${plural(subscribed, "subscribed contact")} at once. That fits in one batch, so there's no review pause.`
+        : `Sendr sends it to the first ${formatNumber(batch)} of your ${plural(subscribed, "subscribed contact")}, then stops so you can check bounces and complaints. Everyone else gets it after you approve.`
 
   return (
     <AlertDialog
@@ -400,9 +388,7 @@ function StartButton({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Start sending?</AlertDialogTitle>
-          <AlertDialogDescription>
-            {audience ?? <Spinner className="mx-auto" />}
-          </AlertDialogDescription>
+          <AlertDialogDescription>{audience}</AlertDialogDescription>
         </AlertDialogHeader>
         {start.error && (
           <p role="alert" className="text-sm text-destructive">
@@ -416,7 +402,7 @@ function StartButton({
             disabled={!subscribed || start.isPending}
           >
             {start.isPending && <Spinner />}
-            {subscribed && subscribed > batch
+            {subscribed > batch
               ? `Send to first ${formatNumber(batch)}`
               : "Send now"}
           </AlertDialogAction>
@@ -428,17 +414,11 @@ function StartButton({
 
 function DraftMenu({ id }: { id: string }) {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const [confirming, setConfirming] = useState(false)
   const remove = useMutation({
     mutationFn: () => api(`/api/admin/campaigns/${id}`, { method: "DELETE" }),
     onSuccess: async () => {
-      // The list loader serves the cache, so drop the draft from it before going there.
-      queryClient.setQueryData(queries.campaigns.queryKey, (campaigns) =>
-        campaigns?.filter((campaign) => campaign.id !== id)
-      )
       await navigate("/campaigns")
-      queryClient.removeQueries({ queryKey: queries.campaign(id).queryKey })
       toast.success("Draft deleted")
     },
   })

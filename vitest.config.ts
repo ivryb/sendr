@@ -17,7 +17,15 @@ export default defineConfig(async () => ({
       },
     }),
   ],
-  resolve: { alias: { "@": resolve(import.meta.dirname, "./src") } },
+  resolve: {
+    alias: {
+      "@": resolve(import.meta.dirname, "./src"),
+      "virtual:react-router/server-build": resolve(
+        import.meta.dirname,
+        "./test/no-pages.ts"
+      ),
+    },
+  },
   test: {
     include: ["test/**/*.test.ts"],
     setupFiles: ["./test/setup.ts"],

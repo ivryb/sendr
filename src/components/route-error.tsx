@@ -1,4 +1,3 @@
-import { useQueryErrorResetBoundary } from "@tanstack/react-query"
 import {
   isRouteErrorResponse,
   Link,
@@ -13,8 +12,6 @@ import { Button } from "@/components/ui/button"
 export function RouteError({ fullPage = false }: { fullPage?: boolean }) {
   const error = useRouteError()
   const revalidator = useRevalidator()
-  // Lets a query that failed while rendering fetch again instead of rethrowing its error.
-  const { reset } = useQueryErrorResetBoundary()
   const missing = isRouteErrorResponse(error) && error.status === 404
   const content = missing ? (
     <div className="flex flex-col items-start gap-4 py-16">
@@ -30,14 +27,11 @@ export function RouteError({ fullPage = false }: { fullPage?: boolean }) {
     </div>
   ) : (
     <LoadError
-      onRetry={() => {
-        reset()
-        return revalidator.revalidate()
-      }}
+      onRetry={() => revalidator.revalidate()}
       retrying={revalidator.state === "loading"}
     />
   )
-  // The auth gate fails before the app shell exists, so it centers the message itself.
+  // Outside the app shell (sign-in, or the shell itself failing), the message centers itself.
   if (fullPage) {
     return (
       <div className="mx-auto w-full max-w-sm px-5 pt-[14vh]">{content}</div>

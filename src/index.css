@@ -133,11 +133,15 @@
 
 /* Held at zero width for its first 150ms, so quick navigations never flash it. */
 @keyframes nav-progress {
-    from { transform: scaleX(0); }
-    to { transform: scaleX(0.9); }
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(0.9);
+  }
 }
 
 .nav-progress {
-    transform-origin: left;
-    animation: nav-progress 8s cubic-bezier(0.1, 0.7, 0.2, 1) 150ms both;
+  transform-origin: left;
+  animation: nav-progress 8s cubic-bezier(0.1, 0.7, 0.2, 1) 150ms both;
 }

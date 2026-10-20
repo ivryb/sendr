@@ -8,9 +8,6 @@
       "path": "./tsconfig.node.json"
     },
     {
-      "path": "./tsconfig.worker.json"
-    },
-    {
       "path": "./tsconfig.site.json"
     }
   ],

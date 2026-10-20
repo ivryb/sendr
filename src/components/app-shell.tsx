@@ -1,5 +1,3 @@
-import { Suspense } from "react"
-import { useQuery } from "@tanstack/react-query"
 import {
   ChevronsUpDownIcon,
   KeyRoundIcon,
@@ -8,7 +6,16 @@ import {
   SettingsIcon,
   UsersIcon,
 } from "lucide-react"
-import { Link, NavLink, Outlet, useMatch, useNavigation } from "react-router"
+import {
+  Link,
+  NavLink,
+  Outlet,
+  useMatch,
+  useNavigation,
+  useRouteLoaderData,
+} from "react-router"
+
+import type { Route } from "./+types/app-shell"
 
 import { Logo } from "@/components/logo"
 import {
@@ -31,7 +38,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { queries } from "@/lib/api"
+import { adminContext, requireAdmin } from "@/lib/admin.server"
 import { authClient } from "@/lib/auth-client"
 import { useAddPasskey } from "@/lib/passkeys"
 
@@ -41,7 +48,19 @@ const NAV = [
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ]
 
-export function AppShell() {
+// Every page inside the shell is for signed-in admins only.
+export const middleware: Route.MiddlewareFunction[] = [requireAdmin]
+
+export function loader({ context }: Route.LoaderArgs) {
+  return { admin: context.get(adminContext) }
+}
+
+/** The signed-in admin, for any page inside the shell. */
+export function useAdmin() {
+  return useRouteLoaderData<typeof loader>("components/app-shell")!.admin
+}
+
+export default function AppShell() {
   return (
     <SidebarProvider>
       <NavigationProgress />
@@ -72,10 +91,7 @@ export function AppShell() {
           </Link>
         </header>
         <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-6 sm:px-8 sm:py-10">
-          {/* Loaders fill the cache before a page renders, so this never shows in practice. */}
-          <Suspense>
-            <Outlet />
-          </Suspense>
+          <Outlet />
         </div>
       </SidebarInset>
     </SidebarProvider>
@@ -107,14 +123,12 @@ function NavItem({ to, label, icon: Icon }: (typeof NAV)[number]) {
 }
 
 function AccountMenu() {
-  const me = useQuery(queries.me).data
+  const me = useAdmin()
   const addPasskey = useAddPasskey()
-  if (!me) return null
 
   const signOut = async () => {
     await authClient.signOut()
-    // A full reload drops every cached response from the signed-in session.
-    window.location.assign("/")
+    window.location.assign("/sign-in")
   }
 
   return (

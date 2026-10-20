@@ -1,32 +1,41 @@
-import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query"
+import { useMutation } from "@tanstack/react-query"
 import { CheckIcon, PlusIcon } from "lucide-react"
 import { Link, useNavigate } from "react-router"
 import { cn } from "cn"
 
+import type { Route } from "./+types/campaigns"
 import { CampaignStatusBadge } from "@/components/campaign-status"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
-import { api, contactCounts, queries } from "@/lib/api"
+import { api } from "@/lib/api"
 import { deliveryStats, refreshInterval } from "@/lib/campaign"
-import { formatDate, formatNumber } from "@/lib/format"
+import { formatNumber, useDates } from "@/lib/format"
+import { usePolling } from "@/lib/use-polling"
 import type { Campaign } from "../../shared/model"
+import { listCampaigns } from "../../worker/domain/campaigns"
+import { contactCounts } from "../../worker/domain/contacts"
+import { getSettings } from "../../worker/lib/settings"
 
-export function CampaignsPage() {
-  const campaigns = useSuspenseQuery({
-    ...queries.campaigns,
-    refetchInterval: (query) => {
-      const intervals = (query.state.data ?? [])
-        .map(refreshInterval)
-        .filter((interval) => interval !== false)
-      return intervals.length ? Math.min(...intervals) : false
-    },
-    refetchOnWindowFocus: true,
-  }).data
+export async function loader() {
+  const [campaigns, settings, counts] = await Promise.all([
+    listCampaigns(),
+    getSettings(),
+    contactCounts(),
+  ])
+  return {
+    campaigns,
+    hasSender: Boolean(settings.fromEmail),
+    hasContacts: Object.values(counts).some(Boolean),
+  }
+}
+
+export default function CampaignsPage({ loaderData }: Route.ComponentProps) {
+  const { campaigns, hasSender, hasContacts } = loaderData
+  const intervals = campaigns
+    .map(refreshInterval)
+    .filter((interval) => interval !== false)
+  usePolling(intervals.length ? Math.min(...intervals) : false)
   const create = useCreateCampaign()
 
   return (
@@ -48,7 +57,11 @@ export function CampaignsPage() {
           ))}
         </ul>
       ) : (
-        <GettingStarted onCreate={() => create.mutate()} />
+        <GettingStarted
+          hasSender={hasSender}
+          hasContacts={hasContacts}
+          onCreate={() => create.mutate()}
+        />
       )}
     </div>
   )
@@ -56,19 +69,15 @@ export function CampaignsPage() {
 
 function useCreateCampaign() {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () =>
       api<{ campaign: Campaign }>("/api/admin/campaigns", { body: {} }),
-    onSuccess: ({ campaign }) => {
-      queryClient.setQueryData(queries.campaign(campaign.id).queryKey, campaign)
-      queryClient.invalidateQueries({ queryKey: queries.campaigns.queryKey })
-      navigate(`/campaigns/${campaign.id}`)
-    },
+    onSuccess: ({ campaign }) => navigate(`/campaigns/${campaign.id}`),
   })
 }
 
 function CampaignRow({ campaign }: { campaign: Campaign }) {
+  const { formatDate } = useDates()
   const { handedOff } = deliveryStats(campaign.counts)
   const date = campaign.finishedAt ?? campaign.startedAt ?? campaign.createdAt
   const dateLabel = campaign.finishedAt
@@ -106,12 +115,18 @@ function CampaignRow({ campaign }: { campaign: Campaign }) {
 const STEP_ACTION =
   "w-fit text-sm font-medium underline underline-offset-4 hover:text-muted-foreground"
 
-function GettingStarted({ onCreate }: { onCreate: () => void }) {
-  const settings = useSuspenseQuery(queries.settings).data
-  const counts = useSuspenseQuery(contactCounts).data.counts
+function GettingStarted({
+  hasSender,
+  hasContacts,
+  onCreate,
+}: {
+  hasSender: boolean
+  hasContacts: boolean
+  onCreate: () => void
+}) {
   const steps = [
     {
-      done: Boolean(settings.fromEmail),
+      done: hasSender,
       title: "Add a sender",
       body: "Choose the name and address your emails come from, and your postal address for the footer.",
       action: (
@@ -121,7 +136,7 @@ function GettingStarted({ onCreate }: { onCreate: () => void }) {
       ),
     },
     {
-      done: Object.values(counts).some(Boolean),
+      done: hasContacts,
       title: "Connect your contacts",
       body: "Create an API key and sync your users from your app.",
       action: (
