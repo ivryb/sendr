@@ -1,7 +1,6 @@
 import {
   AtSignIcon,
   ChevronsUpDownIcon,
-  KeyRoundIcon,
   LogOutIcon,
   MailIcon,
   SettingsIcon,
@@ -41,7 +40,6 @@ import {
 } from "@/components/ui/sidebar"
 import { adminContext, requireAdmin } from "@/lib/admin.server"
 import { authClient } from "@/lib/auth-client"
-import { useAddPasskey } from "@/lib/passkeys"
 
 const NAV = [
   { to: "/campaigns", label: "Campaigns", icon: MailIcon },
@@ -127,7 +125,6 @@ function NavItem({ to, label, icon: Icon }: (typeof NAV)[number]) {
 
 function AccountMenu() {
   const me = useAdmin()
-  const addPasskey = useAddPasskey()
 
   const signOut = async () => {
     await authClient.signOut()
@@ -155,10 +152,6 @@ function AccountMenu() {
             <ChevronsUpDownIcon className="ml-auto text-muted-foreground" />
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="w-60">
-            <DropdownMenuItem onClick={() => addPasskey.mutate()}>
-              <KeyRoundIcon />
-              Add passkey
-            </DropdownMenuItem>
             <DropdownMenuItem onClick={signOut}>
               <LogOutIcon />
               Sign out
