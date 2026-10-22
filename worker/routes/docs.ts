@@ -84,7 +84,7 @@ Statuses: draft, first_batch, awaiting_approval, sending, sent, cancelled.
 - \`GET /campaigns\`, \`GET /campaigns/{id}\` (with delivery \`counts\`). \`GET /campaigns/{id}\`
   also returns \`links\`: \`[{ "url", "clicks" }]\`, most clicked first.
 - \`POST /campaigns\` with \`{ "subject"?, "markdown"?, "senderId"?, "firstBatchSize"? }\` creates a
-  draft. Without \`senderId\` it uses the first verified sender.
+  draft. Without \`senderId\` it uses the first verified sender, or the first sender while none is.
 - \`PUT /campaigns/{id}\` edits a draft. \`DELETE /campaigns/{id}\` deletes a draft.
 - \`POST /campaigns/{id}/test\` with \`{ "to": "you@example.com" }\` sends one test copy. \`to\` is
   required with an API key.

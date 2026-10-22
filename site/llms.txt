@@ -57,6 +57,8 @@ printf '%s' 'ann@acme.com' | bunx wrangler secret put ADMIN_EMAIL
 
 The first deploy creates the D1 database. Without a Cloudflare domain, drop `--domain` and use the `workers.dev` address it prints. The domain stays attached, so later deploys are `bun run deploy`.
 
+Each instance has its own checkout. The Worker, database and queue names in `wrangler.jsonc` are fixed, so a second instance in the same Cloudflare account would replace the first. Before deploying a second one, give it its own names: the Worker `name`, the D1 `database_name`, and the queue in both `producers` and `consumers` (for example `sendr-acme`, `sendr-acme` and `sendr-acme-send`). Create that queue instead of `sendr-send`, and commit the change in the checkout so `git pull` merges later updates.
+
 Done when `curl -s https://emails.acme.com/api/v1/docs` returns the API reference. A new custom domain can take a few minutes to get its certificate.
 
 ## 5. Give yourself an API key
@@ -82,7 +84,7 @@ Done when `GET /me` returns `"permissions":["full"]` and `GET /settings` returns
 
 1. Create an IAM user for this instance with the policy from the Senders section of the API reference, then an access key for it. Use `aws iam create-user`, `aws iam put-user-policy` and `aws iam create-access-key`. A new key takes about ten seconds to start working. Delete any policy file you wrote.
 2. `POST /senders` with the name, address, region and the key.
-3. `GET /senders/{id}` lists the DNS records SES needs. Add every one; on Cloudflare, set them to DNS only, not proxied. If the domain has no DMARC record, add a TXT record at `_dmarc` with `v=DMARC1; p=none`. Check the sender every few minutes until it's verified. That usually takes under an hour.
+3. `GET /senders/{id}` lists the DNS records SES needs. Add every one; on Cloudflare, set them to DNS only, not proxied. A domain can have only one DMARC record, so skip the `_dmarc` record if the domain already has one. Check the sender every few minutes until it's verified. That usually takes under an hour.
 
 Done when `GET /senders/{id}` returns `"verified": true`.
 

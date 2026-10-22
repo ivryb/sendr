@@ -48,7 +48,7 @@ A sender is an address your campaigns come from, like `news@acme.com`, and the e
 
 1. In **Senders**, choose **Add sender**. Enter the name and address, then create an AWS access key as the page describes: an IAM user with the policy shown there (SES, plus creating and subscribing to Sendr's own SNS topic).
 2. Sendr sets up SES with that key. It starts verifying your domain, and routes delivery, bounce and complaint reports back to Sendr through SNS.
-3. Add the DNS records the sender's page lists (DKIM, and a `mail.` subdomain for SPF). The page checks them on its own.
+3. Add the DNS records the sender's page lists (DKIM, and a `bounce.` subdomain for SPF). The page checks them on its own.
 4. If your SES account is new, request production access from the link on that page. Until AWS approves it, SES only sends to addresses you verified in SES. [Getting SES production access](docs/ses-production-access.md) covers what to write and what to do after a denial.
 
 Each campaign picks its sender in the editor. Instances set up before Senders existed need a sender added this way; their drafts then pick it. To check bounce handling, add `bounce@simulator.amazonses.com` as a contact and send it a campaign; it should show up as bounced.

@@ -65,9 +65,9 @@ if (values.save) {
     file,
     [
       `# Sendr instance. Created by \`bun run api-key\` on ${new Date().toISOString().slice(0, 10)}.`,
-      `SENDR_URL=${url}`,
-      `SENDR_API_KEY=${key}`,
-      `SENDR_CHECKOUT=${process.cwd()}`,
+      `SENDR_URL=${shellQuote(url)}`,
+      `SENDR_API_KEY=${shellQuote(key)}`,
+      `SENDR_CHECKOUT=${shellQuote(process.cwd())}`,
       "",
     ].join("\n"),
     { mode: 0o600 }
@@ -95,6 +95,11 @@ function parsePermissions(value: string) {
 
 function quote(value: string) {
   return `'${value.replaceAll("'", "''")}'`
+}
+
+// The env file is sourced by a shell, so a checkout path with spaces or quotes survives.
+function shellQuote(value: string) {
+  return `'${value.replaceAll("'", `'\\''`)}'`
 }
 
 function fail(message: string): never {

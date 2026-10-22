@@ -4,7 +4,7 @@ New SES accounts start in the sandbox: at most 200 emails a day, only to address
 
 ## Before you request
 
-- Finish the sender in Sendr first: the domain verified, DKIM and the `mail.` subdomain records in place, and delivery reports connected. Reviewers check that you can handle bounces and complaints, and Sendr's setup is your evidence.
+- Finish the sender in Sendr first: the domain verified, DKIM and the `bounce.` subdomain records in place, and delivery reports connected. Reviewers check that you can handle bounces and complaints, and Sendr's setup is your evidence.
 - Add a DMARC record for your domain, even `v=DMARC1; p=none`.
 - Make sure your website is live and explains what you do, with a privacy policy and terms.
 - Request production access in the region your sender uses. AWS approves each region separately.
