@@ -8,11 +8,9 @@ import type { ProviderEvent } from "../email/provider"
  * Records provider feedback on campaign deliveries and single emails. Bounces and complaints
  * also stop future campaigns to that contact.
  */
-export async function applyProviderEvents(events: ProviderEvent[]) {
-  for (const event of events) {
-    await applyToDelivery(event)
-    await applyToEmail(event)
-  }
+export async function applyProviderEvent(event: ProviderEvent) {
+  await applyToDelivery(event)
+  await applyToEmail(event)
 }
 
 async function applyToDelivery(event: ProviderEvent) {

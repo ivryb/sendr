@@ -73,6 +73,8 @@ export const senders = sqliteTable("senders", {
   createdAt: createdAt(),
 })
 
+export type SenderRow = typeof senders.$inferSelect
+
 export const campaigns = sqliteTable("campaigns", {
   id: id(),
   subject: text("subject").notNull().default(""),

@@ -79,33 +79,27 @@ function readMessage(body: string) {
   }
 }
 
-type SesEventDetail = {
+type SesEvent = {
   eventType?: string
   mail?: { messageId?: string }
   bounce?: { bounceType?: string }
 }
 
 /**
- * Reads SES events: an SNS notification's message, or an EventBridge event or its `detail`.
- * Only permanent bounces count: transient ones are retried by SES itself.
+ * Reads the SES event in an SNS notification's message. Only permanent bounces count:
+ * transient ones are retried by SES itself.
  */
-export function parseSesEvents(body: unknown): ProviderEvent[] {
-  const items = Array.isArray(body) ? body : [body]
-  return items.flatMap((item): ProviderEvent[] => {
-    const detail: SesEventDetail = item?.detail ?? item
-    const providerMessageId = detail?.mail?.messageId
-    if (!providerMessageId) return []
-    switch (detail.eventType) {
-      case "Delivery":
-        return [{ type: "delivered", providerMessageId }]
-      case "Bounce":
-        return detail.bounce?.bounceType === "Permanent"
-          ? [{ type: "bounced", providerMessageId }]
-          : []
-      case "Complaint":
-        return [{ type: "complained", providerMessageId }]
-      default:
-        return []
-    }
-  })
+export function parseSesEvent(event: SesEvent | null): ProviderEvent | null {
+  const providerMessageId = event?.mail?.messageId
+  if (!providerMessageId) return null
+  switch (event.eventType) {
+    case "Delivery":
+      return { type: "delivered", providerMessageId }
+    case "Bounce":
+      return event.bounce?.bounceType === "Permanent" ? { type: "bounced", providerMessageId } : null
+    case "Complaint":
+      return { type: "complained", providerMessageId }
+    default:
+      return null
+  }
 }

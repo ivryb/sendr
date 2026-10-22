@@ -3,12 +3,11 @@ import { z } from "zod"
 
 import type { DnsRecord, Sender } from "../../shared/model"
 import { db } from "../db/client"
-import { campaigns, senders } from "../db/schema"
+import { campaigns, senders, type SenderRow } from "../db/schema"
 import { AwsError, sesAccount } from "../email/ses-account"
 import { DomainError } from "../lib/errors"
 import { getSettings, type InstanceSettings } from "../lib/settings"
 
-export type SenderRow = typeof senders.$inferSelect
 
 export const senderInput = z.object({
   name: z.string().trim(),

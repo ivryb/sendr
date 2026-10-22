@@ -1,8 +1,8 @@
 import { Hono } from "hono"
 
 import { markEventsConnected } from "../domain/senders"
-import { applyProviderEvents } from "../domain/events"
-import { parseSesEvents } from "../email/ses"
+import { applyProviderEvent } from "../domain/events"
+import { parseSesEvent } from "../email/ses"
 import { timingSafeEqual } from "../lib/crypto"
 import { getSettings } from "../lib/settings"
 
@@ -29,7 +29,8 @@ export const hooks = new Hono().post("/ses/:secret", async (c) => {
     const confirmed = await fetch(message.SubscribeURL)
     if (!confirmed.ok) return c.json({ error: "confirmation_failed" }, 502)
   } else if (message.Type === "Notification") {
-    await applyProviderEvents(parseSesEvents(JSON.parse(message.Message ?? "null")))
+    const event = parseSesEvent(JSON.parse(message.Message ?? "null"))
+    if (event) await applyProviderEvent(event)
   }
   if (message.TopicArn) await markEventsConnected(message.TopicArn)
   return c.json({ ok: true })

@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers"
 
-import type { senders } from "../db/schema"
+import type { SenderRow } from "../db/schema"
 import type { EmailProvider, OutgoingEmail } from "./provider"
 import { CONFIGURATION_SET } from "./ses-account"
 import { sesProvider } from "./ses"
@@ -23,7 +23,7 @@ export function memoryProvider() {
 }
 
 /** The service that sends a sender's emails. */
-export function senderProvider(sender: typeof senders.$inferSelect): EmailProvider {
+export function senderProvider(sender: SenderRow): EmailProvider {
   const memory = memoryProvider()
   if (memory) return memory
   return sesProvider({

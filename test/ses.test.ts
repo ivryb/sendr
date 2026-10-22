@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { PermanentSendError } from "../worker/email/provider"
-import { parseSesEvents, sesProvider } from "../worker/email/ses"
+import { parseSesEvent, sesProvider } from "../worker/email/ses"
 
 function providerReplying(response: Response) {
   const requests: Request[] = []
@@ -101,35 +101,21 @@ describe("SES provider", () => {
   })
 })
 
-describe("SES events from EventBridge", () => {
+describe("SES events", () => {
   it("maps deliveries, permanent bounces and complaints, and ignores the rest", () => {
-    const event = (detail: object) => ({ source: "aws.ses", detail })
-    expect(
-      parseSesEvents([
-        event({ eventType: "Delivery", mail: { messageId: "a" } }),
-        event({
-          eventType: "Bounce",
-          mail: { messageId: "b" },
-          bounce: { bounceType: "Permanent" },
-        }),
-        event({
-          eventType: "Bounce",
-          mail: { messageId: "c" },
-          bounce: { bounceType: "Transient" },
-        }),
-        event({ eventType: "Complaint", mail: { messageId: "d" } }),
-        event({ eventType: "Open", mail: { messageId: "e" } }),
-      ])
-    ).toEqual([
+    const events = [
+      { eventType: "Delivery", mail: { messageId: "a" } },
+      { eventType: "Bounce", mail: { messageId: "b" }, bounce: { bounceType: "Permanent" } },
+      { eventType: "Bounce", mail: { messageId: "c" }, bounce: { bounceType: "Transient" } },
+      { eventType: "Complaint", mail: { messageId: "d" } },
+      { eventType: "Open", mail: { messageId: "e" } },
+    ]
+    expect(events.map(parseSesEvent)).toEqual([
       { type: "delivered", providerMessageId: "a" },
       { type: "bounced", providerMessageId: "b" },
+      null,
       { type: "complained", providerMessageId: "d" },
+      null,
     ])
-  })
-
-  it("accepts a bare event detail", () => {
-    expect(
-      parseSesEvents({ eventType: "Delivery", mail: { messageId: "a" } })
-    ).toEqual([{ type: "delivered", providerMessageId: "a" }])
   })
 })
