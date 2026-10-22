@@ -78,6 +78,8 @@ function requires(permission: ApiKeyPermission | "admin") {
   })
 }
 
+const csrfGuard = csrf()
+
 const BATCH_LIMIT = 100
 
 const contactsQuery = z.object({
@@ -113,7 +115,9 @@ export const api = new Hono<ApiEnv>()
     })
   })
   // Form posts from another site, even a sibling subdomain, can't ride the admin's session.
-  .use(csrf())
+  // Calls with an API key carry no session to ride, and curl and server-side fetch send no
+  // Origin, which csrf() would refuse.
+  .use((c, next) => (c.req.header("authorization") ? next() : csrfGuard(c, next)))
   .use(authenticate)
   .get("/me", (c) => {
     const { admin, permissions } = c.get("caller")

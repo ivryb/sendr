@@ -197,6 +197,17 @@ describe("safety", () => {
     expect(response.status).toBe(403)
   })
 
+  it("an app's server can call with its key and no Origin or content type, as curl does", async () => {
+    const key = await createApiKey(admin, ["contacts"])
+    const response = await exports.default.fetch(
+      new Request("https://sendr.test/api/v1/contacts/u1", {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${key}` },
+      })
+    )
+    expect(response.status).toBe(200)
+  })
+
   it("answers a bad query with 400, not a crash", async () => {
     const key = await createApiKey(admin, ["contacts"])
     const response = await request("/api/v1/contacts?limit=0", { bearer: key })
