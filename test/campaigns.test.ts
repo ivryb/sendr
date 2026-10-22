@@ -182,6 +182,16 @@ describe("sending a campaign", () => {
     })
   })
 
+  it("won't start while the SES account is in its sandbox", async () => {
+    await addContacts(1)
+    const { id } = await newCampaign()
+    fakeAws.production = false
+    const response = await act(id, "start")
+    expect(response.status).toBe(400)
+    expect((await response.json<{ message: string }>()).message).toContain("sandbox")
+    expect((await campaign(id)).status).toBe("draft")
+  })
+
   it("only drafts can be edited", async () => {
     await addContacts(1)
     const { id } = await newCampaign()
@@ -203,6 +213,14 @@ describe("sending a campaign", () => {
       { to: "owner@example.com", subject: "[Test] News for you" },
     ])
     expect((await campaign(id)).counts.total).toBe(0)
+  })
+
+  it("fills merge tags inside link URLs", async () => {
+    const { id } = await newCampaign({
+      markdown: "[Your plan](https://acme.com/plan?tier={{fields.plan|free}}&ref=news)",
+    })
+    await request(`/api/v1/campaigns/${id}/test`, { cookie: admin, json: {} })
+    expect(sentEmails()[0].html).toContain('href="https://acme.com/plan?tier=free&amp;ref=news"')
   })
 
   it("a stray queue message after the campaign finished sends nothing", async () => {

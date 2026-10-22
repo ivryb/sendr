@@ -22,13 +22,15 @@ export function renderEmail(input: RenderInput): RenderedEmail {
     if (tag.startsWith("fields.")) return input.recipient.fields[tag.slice(7)] || null
     return null
   }
+  // The fallback is part of the template, so in HTML it's already escaped; only contact data is.
   const merge = (template: string, escape: (text: string) => string) =>
-    template.replace(MERGE_TAG, (_, tag: string, fallback = "") =>
-      escape(value(tag) ?? fallback.trim())
-    )
+    template.replace(MERGE_TAG, (_, tag: string, fallback = "") => {
+      const filled = value(tag)
+      return filled === null ? fallback.trim() : escape(filled)
+    })
 
-  const body = merge(marked.parse(input.markdown) as string, escapeHtml)
-  const footer = merge(marked.parse(input.footer) as string, escapeHtml)
+  const body = merge(toHtml(input.markdown), escapeHtml)
+  const footer = merge(toHtml(input.footer), escapeHtml)
   const subject = merge(input.subject, (text) => text)
 
   return {
@@ -59,6 +61,14 @@ export function renderMessage(input: { subject: string; markdown: string }): Ren
     html: layout({ subject: input.subject, body: marked.parse(input.markdown) as string }),
     text: input.markdown,
   }
+}
+
+/** Markdown to HTML. marked percent-encodes link URLs, so their merge tags are put back. */
+function toHtml(markdown: string) {
+  return (marked.parse(markdown) as string).replace(
+    /%7B%7B(.*?)%7D%7D/gi,
+    (_, tag: string) => `{{${escapeHtml(decodeURIComponent(tag))}}}`
+  )
 }
 
 function layout(parts: {
