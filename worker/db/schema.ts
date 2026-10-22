@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm"
 import {
   index,
   integer,
+  primaryKey,
   real,
   sqliteTable,
   text,
@@ -109,6 +110,9 @@ export const deliveries = sqliteTable(
     error: text("error"),
     sentAt: timestamp("sent_at"),
     deliveredAt: timestamp("delivered_at"),
+    // First open and first click; a click also sets openedAt, since images are often blocked.
+    openedAt: timestamp("opened_at"),
+    clickedAt: timestamp("clicked_at"),
   },
   (table) => [
     uniqueIndex("deliveries_campaign_contact_idx").on(
@@ -118,6 +122,19 @@ export const deliveries = sqliteTable(
     index("deliveries_campaign_status_idx").on(table.campaignId, table.status),
     index("deliveries_provider_message_idx").on(table.providerMessageId),
   ]
+)
+
+/** The links each delivery's recipient clicked, once per link, for unique clicks per URL. */
+export const clicks = sqliteTable(
+  "clicks",
+  {
+    deliveryId: text("delivery_id")
+      .notNull()
+      .references(() => deliveries.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [primaryKey({ columns: [table.deliveryId, table.url] })]
 )
 
 /** Single emails sent through the API, so delivery reports and suppression can find them. */

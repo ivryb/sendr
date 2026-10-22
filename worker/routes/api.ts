@@ -36,6 +36,7 @@ import {
   updateSender,
 } from "../domain/senders"
 import { sendTestEmail } from "../domain/sending"
+import { campaignLinks } from "../domain/tracking"
 import { getSettings, toSettingsDto, updateSettings } from "../lib/settings"
 import { apiDocs } from "./docs"
 import { parseJson, parseQuery } from "./validation"
@@ -159,9 +160,13 @@ export const api = new Hono<ApiEnv>()
   .post("/campaigns", requires("full"), async (c) =>
     c.json({ campaign: await createCampaign(await parseJson(c, campaignInput)) })
   )
-  .get("/campaigns/:id", requires("full"), async (c) =>
-    c.json({ campaign: await getCampaign(c.req.param("id")) })
-  )
+  .get("/campaigns/:id", requires("full"), async (c) => {
+    const [campaign, links] = await Promise.all([
+      getCampaign(c.req.param("id")),
+      campaignLinks(c.req.param("id")),
+    ])
+    return c.json({ campaign, links })
+  })
   .put("/campaigns/:id", requires("full"), async (c) =>
     c.json({ campaign: await updateDraft(c.req.param("id"), await parseJson(c, campaignInput)) })
   )

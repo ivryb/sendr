@@ -56,7 +56,15 @@ export const CAMPAIGN_ACTIONS: Record<CampaignStatus, CampaignAction[]> = {
   cancelled: [],
 }
 
-export type CampaignCounts = Record<DeliveryStatus, number> & { total: number }
+/** Deliveries per status, plus how many were opened and clicked (each delivery once). */
+export type CampaignCounts = Record<DeliveryStatus, number> & {
+  total: number
+  opened: number
+  clicked: number
+}
+
+/** A link in a campaign and how many recipients clicked it. */
+export type CampaignLink = { url: string; clicks: number }
 
 export type Campaign = {
   id: string

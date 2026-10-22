@@ -65,6 +65,18 @@ export const RATE_LIMITS: Partial<Record<DeliveryStatus, number>> &
   complained: 0.001,
 }
 
+/**
+ * Opens or clicks as a share of delivered emails (complaints were delivered too). Null until
+ * delivery reports arrive; capped at 100% because a report can lag behind an open.
+ */
+export function engagementRate(
+  counts: CampaignCounts,
+  kind: "opened" | "clicked"
+) {
+  const delivered = counts.delivered + counts.complained
+  return delivered ? Math.min(counts[kind] / delivered, 1) : null
+}
+
 export function deliveryStats(counts: CampaignCounts) {
   // Delivered, bounced and complained are later outcomes of a sent message.
   const handedOff =

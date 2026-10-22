@@ -41,6 +41,16 @@ export async function verifyToken(
   return timingSafeEqual(token.slice(dot + 1), expected) ? id : null
 }
 
+/** Text as URL-safe base64, for carrying values like URLs inside link tokens. */
+export function encodeBase64Url(text: string) {
+  return toBase64Url(encoder.encode(text))
+}
+
+export function decodeBase64Url(value: string) {
+  const binary = atob(value.replaceAll("-", "+").replaceAll("_", "/"))
+  return new TextDecoder().decode(Uint8Array.from(binary, (char) => char.charCodeAt(0)))
+}
+
 async function signature(secret: string, payload: string) {
   const key = await crypto.subtle.importKey(
     "raw",

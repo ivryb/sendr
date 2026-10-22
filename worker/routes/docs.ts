@@ -81,7 +81,8 @@ can check bounces and complaints. Approve only if fewer than about 5% bounced an
 
 Statuses: draft, first_batch, awaiting_approval, sending, sent, cancelled.
 
-- \`GET /campaigns\`, \`GET /campaigns/{id}\` (with delivery \`counts\`)
+- \`GET /campaigns\`, \`GET /campaigns/{id}\` (with delivery \`counts\`). \`GET /campaigns/{id}\`
+  also returns \`links\`: \`[{ "url", "clicks" }]\`, most clicked first.
 - \`POST /campaigns\` with \`{ "subject"?, "markdown"?, "senderId"?, "firstBatchSize"? }\` creates a
   draft. Without \`senderId\` it uses the first verified sender.
 - \`PUT /campaigns/{id}\` edits a draft. \`DELETE /campaigns/{id}\` deletes a draft.
@@ -90,6 +91,12 @@ Statuses: draft, first_batch, awaiting_approval, sending, sent, cancelled.
 - \`POST /campaigns/{id}/start\`, \`/approve\`, \`/cancel\`.
 
 The footer under every campaign (with the sender's postal address) is \`footer\` in settings.
+
+Campaign emails track opens and clicks: links go through the instance, and an invisible image
+records the open. \`counts.opened\` and \`counts.clicked\` are recipients who opened or clicked at
+least once (a click counts as an open), and each link's \`clicks\` counts each recipient once.
+Apple Mail Privacy Protection preloads images, so opens are an overestimate and clicks are the
+reliable signal. Test sends and single emails aren't tracked.
 
 ## Senders (full permission)
 

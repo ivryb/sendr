@@ -11,6 +11,7 @@ import { senderAddress } from "../../shared/model"
 import { getSettings, type InstanceSettings } from "../lib/settings"
 import { advanceCampaign, CampaignError, findCampaign, type SendMessage } from "./campaigns"
 import { campaignSender } from "./senders"
+import { trackEmail } from "./tracking"
 
 export const UNSUBSCRIBE_PURPOSE = "unsubscribe"
 
@@ -59,12 +60,18 @@ export async function processSendMessage({ campaignId }: SendMessage) {
       recipient: contact,
       unsubscribeUrl: url,
     })
+    const html = await trackEmail(email.html, {
+      settings,
+      deliveryId: delivery.id,
+      unsubscribeUrl: url,
+    })
     try {
       const { providerMessageId } = await provider.send({
         from: senderAddress(sender),
         replyTo: sender.replyTo || undefined,
         to: contact.email,
         ...email,
+        html,
         headers: unsubscribeHeaders(url),
       })
       // A crash between the send and this write resends one email on retry. That rare

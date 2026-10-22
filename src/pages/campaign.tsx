@@ -8,22 +8,25 @@ import { CampaignEditor } from "@/pages/campaign-editor"
 import { CampaignError, getCampaign } from "../../worker/domain/campaigns"
 import { contactCounts } from "../../worker/domain/contacts"
 import { listSenders } from "../../worker/domain/senders"
+import { campaignLinks } from "../../worker/domain/tracking"
 import { getSettings } from "../../worker/lib/settings"
 
 export async function loader({ params }: Route.LoaderArgs) {
-  const [campaign, settings, senders, counts] = await Promise.all([
+  const [campaign, links, settings, senders, counts] = await Promise.all([
     getCampaign(params.id).catch((error) => {
       if (error instanceof CampaignError && error.code === "not_found") {
         throw data(null, { status: 404 })
       }
       throw error
     }),
+    campaignLinks(params.id),
     getSettings(),
     listSenders(),
     contactCounts(),
   ])
   return {
     campaign,
+    links,
     senders,
     footer: settings.footer,
     subscribed: counts.subscribed ?? 0,
@@ -31,7 +34,7 @@ export async function loader({ params }: Route.LoaderArgs) {
 }
 
 export default function CampaignPage({ loaderData }: Route.ComponentProps) {
-  const { campaign, senders, footer, subscribed } = loaderData
+  const { campaign, links, senders, footer, subscribed } = loaderData
   usePolling(refreshInterval(campaign))
 
   return campaign.status === "draft" ? (
@@ -45,6 +48,7 @@ export default function CampaignPage({ loaderData }: Route.ComponentProps) {
   ) : (
     <CampaignDetail
       campaign={campaign}
+      links={links}
       sender={senders.find((sender) => sender.id === campaign.senderId) ?? null}
       footer={footer}
     />

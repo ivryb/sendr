@@ -192,6 +192,8 @@ async function deliveryCounts(campaignId?: string) {
       campaignId: deliveries.campaignId,
       status: deliveries.status,
       count: sql<number>`count(*)`,
+      opened: sql<number>`count(${deliveries.openedAt})`,
+      clicked: sql<number>`count(${deliveries.clickedAt})`,
     })
     .from(deliveries)
     .where(campaignId ? eq(deliveries.campaignId, campaignId) : undefined)
@@ -200,6 +202,8 @@ async function deliveryCounts(campaignId?: string) {
     const entry = counts.get(row.campaignId) ?? emptyCounts()
     entry[row.status] = row.count
     entry.total += row.count
+    entry.opened += row.opened
+    entry.clicked += row.clicked
     counts.set(row.campaignId, entry)
   }
   return counts
@@ -207,7 +211,7 @@ async function deliveryCounts(campaignId?: string) {
 
 function emptyCounts(): CampaignCounts {
   return Object.assign(
-    { total: 0 },
+    { total: 0, opened: 0, clicked: 0 },
     Object.fromEntries(DELIVERY_STATUSES.map((status) => [status, 0]))
   ) as CampaignCounts
 }

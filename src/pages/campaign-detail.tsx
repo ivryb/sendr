@@ -30,6 +30,7 @@ import {
   DELIVERY_LABELS,
   RATE_LIMITS,
   deliveryStats,
+  engagementRate,
 } from "@/lib/campaign"
 import { formatNumber, formatPercent, plural, useDates } from "@/lib/format"
 import { useChange } from "@/lib/mutations"
@@ -37,6 +38,8 @@ import {
   CAMPAIGN_ACTIONS,
   type Campaign,
   type CampaignAction,
+  type CampaignCounts,
+  type CampaignLink,
   type DeliveryStatus,
   type Sender,
 } from "../../shared/model"
@@ -71,8 +74,17 @@ const ACTIONS: Record<
   },
 }
 
-const COUNT_CARDS: DeliveryStatus[] = [
+type Engagement = "opened" | "clicked"
+
+const ENGAGEMENT_LABELS: Record<Engagement, string> = {
+  opened: "Opened",
+  clicked: "Clicked",
+}
+
+const COUNT_CARDS: (DeliveryStatus | Engagement)[] = [
   "delivered",
+  "opened",
+  "clicked",
   "bounced",
   "complained",
   "failed",
@@ -82,10 +94,12 @@ const COUNT_CARDS: DeliveryStatus[] = [
 
 export function CampaignDetail({
   campaign,
+  links,
   sender,
   footer,
 }: {
   campaign: Campaign
+  links: CampaignLink[]
   sender: Sender | null
   footer: string
 }) {
@@ -145,12 +159,14 @@ export function CampaignDetail({
 
       <section className="flex flex-col gap-3">
         <h2 className="font-medium">Deliveries</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {COUNT_CARDS.map((status) => (
-            <CountCard key={status} status={status} campaign={campaign} />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {COUNT_CARDS.map((name) => (
+            <CountCard key={name} name={name} counts={campaign.counts} />
           ))}
         </div>
       </section>
+
+      {links.length > 0 && <ClickedLinks links={links} />}
 
       <section className="flex flex-col gap-3">
         <h2 className="font-medium">Message</h2>
@@ -315,22 +331,36 @@ function Review({ campaign }: { campaign: Campaign }) {
   )
 }
 
+/** A count with its rate: bounces and complaints of sent emails, opens and clicks of delivered. */
+function countStats(name: DeliveryStatus | Engagement, counts: CampaignCounts) {
+  if (name === "opened" || name === "clicked") {
+    return {
+      label: ENGAGEMENT_LABELS[name],
+      rate: engagementRate(counts, name),
+      high: false,
+    }
+  }
+  const limit = RATE_LIMITS[name]
+  const rate = deliveryStats(counts).rate(name)
+  return {
+    label: DELIVERY_LABELS[name],
+    rate: limit === undefined ? null : rate,
+    high: limit !== undefined && rate > limit,
+  }
+}
+
 function CountCard({
-  status,
-  campaign,
+  name,
+  counts,
 }: {
-  status: DeliveryStatus
-  campaign: Campaign
+  name: DeliveryStatus | Engagement
+  counts: CampaignCounts
 }) {
-  const count = campaign.counts[status]
-  const limit = RATE_LIMITS[status]
-  const rate = deliveryStats(campaign.counts).rate(status)
-  const high = limit !== undefined && rate > limit
+  const count = counts[name]
+  const { label, rate, high } = countStats(name, counts)
   return (
     <div className="flex flex-col gap-1 rounded-xl bg-card px-4 py-3.5 ring-1 ring-foreground/10">
-      <span className="text-sm text-muted-foreground">
-        {DELIVERY_LABELS[status]}
-      </span>
+      <span className="text-sm text-muted-foreground">{label}</span>
       <span className="flex items-baseline gap-2">
         <span
           className={cn(
@@ -341,13 +371,42 @@ function CountCard({
         >
           {formatNumber(count)}
         </span>
-        {limit !== undefined && count > 0 && (
+        {rate !== null && count > 0 && (
           <span className="text-xs text-muted-foreground tabular-nums">
             {formatPercent(rate)}
           </span>
         )}
       </span>
     </div>
+  )
+}
+
+function ClickedLinks({ links }: { links: CampaignLink[] }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="font-medium">Links</h2>
+      <ul className="divide-y rounded-xl bg-card ring-1 ring-foreground/10">
+        {links.map((link) => (
+          <li
+            key={link.url}
+            className="flex items-center gap-4 px-4 py-3 text-sm"
+          >
+            <a
+              href={link.url}
+              target="_blank"
+              rel="noreferrer"
+              title={link.url}
+              className="min-w-0 flex-1 truncate underline-offset-4 hover:underline"
+            >
+              {link.url.replace(/^https?:\/\/(www\.)?/, "")}
+            </a>
+            <span className="shrink-0 text-muted-foreground tabular-nums">
+              {plural(link.clicks, "click")}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 

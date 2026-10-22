@@ -36,6 +36,13 @@
       "when": 1792472657939,
       "tag": "0004_api_key_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1792645344509,
+      "tag": "0005_click_and_open_tracking",
+      "breakpoints": true
     }
   ]
 }

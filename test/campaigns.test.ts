@@ -1,7 +1,7 @@
 import { createMessageBatch } from "cloudflare:test"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { Campaign } from "../shared/model"
+import type { Campaign, CampaignLink } from "../shared/model"
 import worker from "../worker"
 import { fakeAws } from "./fake-aws"
 import { addSender, createApiKey, request, sentEmails, signInAsAdmin } from "./helpers"
@@ -218,5 +218,112 @@ describe("sending a campaign", () => {
 
     expect(sentEmails()).toHaveLength(3)
   })
+})
 
+describe("tracking clicks and opens", () => {
+  const DOCS = "https://example.com/docs?a=1&b=2"
+
+  async function sendTracked() {
+    await request("/api/v1/settings", {
+      method: "PUT",
+      cookie: admin,
+      json: { footer: "Example Inc, [our site](https://example.com)" },
+    })
+    await addContacts(2)
+    const { id } = await newCampaign({
+      markdown: `Read [the docs](${DOCS}) or [write us](mailto:hi@example.com).`,
+    })
+    await act(id, "start")
+    await reachStatus(id, "sent")
+    return id
+  }
+
+  const emailTo = (to: string) => sentEmails().find((email) => email.to === to)!
+  const clickLinks = (html: string) =>
+    Array.from(html.matchAll(/href="https:\/\/sendr\.test(\/c\/[^"]+)"/g), (match) => match[1])
+  const openPixel = (html: string) => html.match(/src="https:\/\/sendr\.test(\/o\/[^"]+)"/)![1]
+  // Without "manual", the test fetcher follows the redirect back into the Worker.
+  const click = (path: string) => request(path, { redirect: "manual" })
+
+  async function report(id: string) {
+    const response = await request(`/api/v1/campaigns/${id}`, { cookie: admin })
+    return response.json<{ campaign: Campaign; links: CampaignLink[] }>()
+  }
+
+  it("sends links through the instance, which redirects to the original URL", async () => {
+    await sendTracked()
+    const { html, text } = emailTo("reader0@example.com")
+
+    const [docs, site] = clickLinks(html)
+    const redirect = await click(docs)
+    expect(redirect.status).toBe(302)
+    expect(redirect.headers.get("location")).toBe(DOCS)
+    expect((await click(site)).headers.get("location")).toBe("https://example.com")
+
+    expect(html).not.toContain('href="https://example.com')
+    expect(html).toContain('href="mailto:hi@example.com"')
+    expect(html).toMatch(/href="https:\/\/sendr\.test\/u\/[^"]+"[^>]*>Unsubscribe/)
+    expect(text).toContain(DOCS)
+  })
+
+  it("counts each recipient's open and click once, even when repeated", async () => {
+    const id = await sendTracked()
+    const ann = emailTo("reader0@example.com").html
+    const other = emailTo("reader1@example.com").html
+
+    for (let i = 0; i < 2; i++) {
+      await request(openPixel(ann))
+      await click(clickLinks(ann)[0])
+    }
+    // Images blocked: a click alone still counts as an open.
+    await click(clickLinks(other)[0])
+
+    const { campaign, links } = await report(id)
+    expect(campaign.counts).toMatchObject({ opened: 2, clicked: 2 })
+    expect(links).toEqual([{ url: DOCS, clicks: 2 }])
+  })
+
+  it("the open pixel is an uncached image, even for a bad token", async () => {
+    const id = await sendTracked()
+    const pixel = await request(openPixel(emailTo("reader0@example.com").html))
+    expect(pixel.status).toBe(200)
+    expect(pixel.headers.get("content-type")).toBe("image/gif")
+    expect(pixel.headers.get("cache-control")).toContain("no-store")
+
+    const broken = await request("/o/not-a-token")
+    expect(broken.status).toBe(200)
+    expect(broken.headers.get("content-type")).toBe("image/gif")
+    expect((await report(id)).campaign.counts.opened).toBe(1)
+  })
+
+  it("a tampered click link can't redirect anywhere else", async () => {
+    await sendTracked()
+    const [docs] = clickLinks(emailTo("reader0@example.com").html)
+    const [delivery, , signature] = docs.slice("/c/".length).split(".")
+    const evil = btoa("https://evil.example").replaceAll("=", "")
+
+    expect((await click(`/c/${delivery}.${evil}.${signature}`)).status).toBe(404)
+    expect((await click("/c/garbage")).status).toBe(404)
+  })
+
+  it("test sends and single emails keep their real links", async () => {
+    const id = await sendTracked()
+    sentEmails().length = 0
+    await request(`/api/v1/campaigns/${id}/test`, { cookie: admin, json: {} })
+    await request("/api/v1/emails", {
+      bearer: await createApiKey(admin, ["emails"]),
+      json: {
+        from: "evan@example.com",
+        to: "ann@example.com",
+        subject: "Welcome",
+        markdown: `See [the docs](${DOCS}).`,
+      },
+    })
+
+    expect(sentEmails()).toHaveLength(2)
+    for (const { html } of sentEmails()) {
+      expect(html).toContain('href="https://example.com/docs?a=1&amp;b=2"')
+      expect(html).not.toMatch(/sendr\.test\/[co]\//)
+    }
+  })
 })

@@ -113,6 +113,8 @@ Campaigns are Markdown. Merge tags fill in contact data with a fallback: `Hey {{
 
 Starting a campaign sends it to the first batch (200 contacts by default) and pauses. Check delivered, bounced and complained counts, then approve sending to everyone else. As a rule of thumb, stop if more than about 5% bounce or 0.1% complain.
 
+The campaign page also shows how many recipients opened and clicked, and which links they clicked. Links in campaign emails go through your Sendr domain to count clicks, and an invisible image counts opens. Apple Mail preloads images, so opens run high; clicks are the reliable signal.
+
 ## Configuration
 
 | Name | Kind | Purpose |
