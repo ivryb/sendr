@@ -1,3 +1,5 @@
+import { DomainError } from "../lib/errors"
+
 export type OutgoingEmail = {
   from: string
   to: string
@@ -22,5 +24,12 @@ export interface EmailProvider {
   send(email: OutgoingEmail): Promise<{ providerMessageId: string }>
 }
 
-/** The provider refused this one email (bad address, rejected content); retrying won't help. */
-export class PermanentSendError extends Error {}
+/**
+ * The provider refused this one email (bad address, rejected content); retrying won't help.
+ * Its message is the provider's own reason, so the API shows it as a 422.
+ */
+export class PermanentSendError extends DomainError {
+  constructor(message: string) {
+    super("rejected", 422, message)
+  }
+}

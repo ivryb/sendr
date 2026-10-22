@@ -89,6 +89,14 @@ export async function startCampaign(id: string, settings: InstanceSettings) {
       `${check.sender.email} isn't verified yet. Finish its setup in Senders before sending.`
     )
   }
+  // In the SES sandbox every unverified recipient fails, and first-batch contacts that fail
+  // never get the campaign, since approving sends only to the rest.
+  if (!check.sender.production) {
+    throw new CampaignError(
+      "not_ready",
+      `${check.sender.email}'s SES account is still in the sandbox, so it only sends to addresses verified in SES. Request production access from its page in Senders, then start the campaign.`
+    )
+  }
 
   // Idempotent: a repeated or concurrent start inserts nothing new, and only one request
   // wins the draft -> first_batch transition below.
