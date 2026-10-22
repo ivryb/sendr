@@ -25,7 +25,7 @@ export default function SendersPage({ loaderData }: Route.ComponentProps) {
     <div className="flex flex-col gap-8">
       <PageHeader
         title="Senders"
-        description="The addresses your campaigns come from. The first ready one also sends login codes."
+        description="The addresses your campaigns come from. The first verified one also sends login codes."
         actions={
           senders.length > 0 && (
             <Button nativeButton={false} render={<Link to="/senders/new" />}>

@@ -3,6 +3,7 @@ import type {
   CampaignCounts,
   CampaignStatus,
   DeliveryStatus,
+  Engagement,
 } from "../../shared/model"
 
 type StatusMeta = {
@@ -69,10 +70,7 @@ export const RATE_LIMITS: Partial<Record<DeliveryStatus, number>> &
  * Opens or clicks as a share of delivered emails (complaints were delivered too). Null until
  * delivery reports arrive; capped at 100% because a report can lag behind an open.
  */
-export function engagementRate(
-  counts: CampaignCounts,
-  kind: "opened" | "clicked"
-) {
+export function engagementRate(counts: CampaignCounts, kind: Engagement) {
   const delivered = counts.delivered + counts.complained
   return delivered ? Math.min(counts[kind] / delivered, 1) : null
 }

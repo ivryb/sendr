@@ -44,7 +44,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { api } from "@/lib/api"
+import { api, ApiError } from "@/lib/api"
 import { formatNumber, plural } from "@/lib/format"
 import { useChange } from "@/lib/mutations"
 import type { Campaign, Sender } from "../../shared/model"
@@ -238,12 +238,15 @@ function useAutosave<T extends Record<string, unknown>>(
   })
   const dirty = !sameValues(value, saved)
   const { mutate, mutateAsync } = save
+  // A refused save (say, the campaign was started elsewhere) waits for an edit or a retry
+  // instead of repeating the same request.
+  const refused = save.isError && save.variables && sameValues(save.variables, value)
 
   useEffect(() => {
-    if (!dirty || save.isPending) return
+    if (!dirty || save.isPending || refused) return
     const timer = setTimeout(() => mutate(value), 700)
     return () => clearTimeout(timer)
-  }, [value, dirty, save.isPending, mutate])
+  }, [value, dirty, save.isPending, refused, mutate])
 
   // Leaving within the debounce window still keeps the last keystrokes.
   const pending = useRef<T | null>(null)
@@ -272,6 +275,7 @@ function useAutosave<T extends Record<string, unknown>>(
         : dirty
           ? ("error" as const)
           : ("saved" as const),
+    error: save.error instanceof ApiError ? save.error.message : null,
     retry: () => mutate(value),
     flush: async () => {
       if (dirty) await mutateAsync(value)
@@ -292,7 +296,7 @@ function sameValues<T extends Record<string, unknown>>(a: T, b: T) {
   return Object.keys(a).every((key) => a[key] === b[key])
 }
 
-type Autosave = Pick<ReturnType<typeof useAutosave>, "status" | "retry">
+type Autosave = Pick<ReturnType<typeof useAutosave>, "status" | "error" | "retry">
 
 function SaveIndicator({ saves }: { saves: Autosave[] }) {
   const failed = saves.filter((save) => save.status === "error")
@@ -308,8 +312,8 @@ function SaveIndicator({ saves }: { saves: Autosave[] }) {
         onClick={() => failed.forEach((save) => save.retry())}
         className="inline-flex items-center gap-1.5 px-1 text-xs text-destructive"
       >
-        <TriangleAlertIcon className="size-3.5" />
-        Not saved. Retry
+        <TriangleAlertIcon className="size-3.5 shrink-0" />
+        {failed[0].error ?? "Not saved."} Retry
       </button>
     )
   }

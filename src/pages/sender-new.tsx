@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react"
 import { useMutation } from "@tanstack/react-query"
 import { CheckIcon, ExternalLinkIcon } from "lucide-react"
 import { useNavigate } from "react-router"
+import type { z } from "zod"
 
 import { CodeBlock } from "@/components/code-block"
 import { PageHeader } from "@/components/page-header"
@@ -26,6 +27,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { api, ApiError } from "@/lib/api"
 import type { Sender } from "../../shared/model"
 import { SES_KEY_POLICY } from "../../shared/ses"
+import type { senderInput } from "../../worker/domain/senders"
 
 const REGIONS = [
   { value: "us-east-1", label: "US East (N. Virginia)" },
@@ -86,14 +88,7 @@ function ServiceStep({ onNext }: { onNext: () => void }) {
   )
 }
 
-type Values = {
-  name: string
-  email: string
-  replyTo: string
-  region: string
-  accessKeyId: string
-  secretAccessKey: string
-}
+type Values = z.input<typeof senderInput>
 
 function ConnectStep() {
   const navigate = useNavigate()

@@ -55,8 +55,8 @@ export default function SenderPage({ loaderData }: Route.ComponentProps) {
   const check = loaderData
   const { sender } = check
   const ready = check.ok && sender.verified && sender.production
-  // DNS changes and AWS approval happen elsewhere; keep looking until they land.
-  usePolling(check.ok && !sender.verified ? 30_000 : false)
+  // DNS changes and the first delivery report happen elsewhere; keep looking until they land.
+  usePolling(check.ok && !(sender.verified && sender.eventsConnected) ? 30_000 : false)
 
   return (
     <div className="flex max-w-3xl flex-col gap-8">
@@ -367,6 +367,9 @@ function EditSender({ sender }: { sender: Sender }) {
           )}
         </Field>
       </div>
+      {error && !error.fieldError("replyTo") && (
+        <p className="text-sm text-destructive">{error.message}</p>
+      )}
       <Button
         type="submit"
         variant={dirty ? "default" : "outline"}

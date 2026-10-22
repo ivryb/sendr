@@ -38,7 +38,7 @@ import {
   CAMPAIGN_ACTIONS,
   type Campaign,
   type CampaignAction,
-  type CampaignCounts,
+  type Engagement,
   type CampaignLink,
   type DeliveryStatus,
   type Sender,
@@ -73,8 +73,6 @@ const ACTIONS: Record<
     confirm: "Cancel campaign",
   },
 }
-
-type Engagement = "opened" | "clicked"
 
 const ENGAGEMENT_LABELS: Record<Engagement, string> = {
   opened: "Opened",
@@ -161,7 +159,7 @@ export function CampaignDetail({
         <h2 className="font-medium">Deliveries</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {COUNT_CARDS.map((name) => (
-            <CountCard key={name} name={name} counts={campaign.counts} />
+            <CountCard key={name} name={name} campaign={campaign} />
           ))}
         </div>
       </section>
@@ -332,7 +330,8 @@ function Review({ campaign }: { campaign: Campaign }) {
 }
 
 /** A count with its rate: bounces and complaints of sent emails, opens and clicks of delivered. */
-function countStats(name: DeliveryStatus | Engagement, counts: CampaignCounts) {
+function countStats(name: DeliveryStatus | Engagement, campaign: Campaign) {
+  const { counts } = campaign
   if (name === "opened" || name === "clicked") {
     return {
       label: ENGAGEMENT_LABELS[name],
@@ -343,7 +342,8 @@ function countStats(name: DeliveryStatus | Engagement, counts: CampaignCounts) {
   const limit = RATE_LIMITS[name]
   const rate = deliveryStats(counts).rate(name)
   return {
-    label: DELIVERY_LABELS[name],
+    // A cancelled campaign's queued contacts will never get it.
+    label: name === "queued" && campaign.status === "cancelled" ? "Not sent" : DELIVERY_LABELS[name],
     rate: limit === undefined ? null : rate,
     high: limit !== undefined && rate > limit,
   }
@@ -351,13 +351,13 @@ function countStats(name: DeliveryStatus | Engagement, counts: CampaignCounts) {
 
 function CountCard({
   name,
-  counts,
+  campaign,
 }: {
   name: DeliveryStatus | Engagement
-  counts: CampaignCounts
+  campaign: Campaign
 }) {
-  const count = counts[name]
-  const { label, rate, high } = countStats(name, counts)
+  const count = campaign.counts[name]
+  const { label, rate, high } = countStats(name, campaign)
   return (
     <div className="flex flex-col gap-1 rounded-xl bg-card px-4 py-3.5 ring-1 ring-foreground/10">
       <span className="text-sm text-muted-foreground">{label}</span>
