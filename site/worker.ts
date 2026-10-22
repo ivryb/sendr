@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import { LOGIN_CODE_PATTERN, loginCodeEmail } from "../shared/login-code"
+import llms from "./llms.txt"
 
 const LoginCode = z.object({
   email: z.email(),
@@ -35,6 +36,10 @@ export default {
     const { pathname } = new URL(request.url)
     if (pathname === "/api/login-code" && request.method === "POST") {
       return sendLoginCode(request, env)
+    }
+    // The setup guide people paste into their agent.
+    if (pathname === "/llms.txt") {
+      return new Response(llms, { headers: { "content-type": "text/plain; charset=utf-8" } })
     }
     return Response.redirect("https://github.com/ivryb/sendr", 302)
   },

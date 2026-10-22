@@ -14,7 +14,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "deploy": "react-router build && wrangler deploy && wrangler d1 migrations apply DB --remote",
-    "deploy:site": "wrangler deploy -c site/wrangler.jsonc"
+    "deploy:site": "wrangler deploy -c site/wrangler.jsonc",
+    "api-key": "bun scripts/api-key.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

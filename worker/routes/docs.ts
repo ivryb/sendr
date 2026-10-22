@@ -1,3 +1,5 @@
+import { SES_KEY_POLICY } from "../../shared/ses"
+
 /** The API reference served at /api/v1/docs, written for agents and developers to read. */
 export function apiDocs(baseUrl: string) {
   const api = `${baseUrl}/api/v1`
@@ -95,14 +97,26 @@ A sender is a From address and the Amazon SES account that sends for it.
 
 - \`GET /senders\`
 - \`POST /senders\` with \`{ "name", "email", "replyTo"?, "region", "accessKeyId", "secretAccessKey" }\`
-  sets up SES: domain verification and delivery reports. The key needs \`ses:*\` and
-  \`sns:CreateTopic\`, \`sns:Subscribe\` on \`arn:aws:sns:*:*:sendr-*\`.
+  sets up SES: domain verification and delivery reports. It needs \`publicUrl\` in settings,
+  since SES reports back to it. Give the key its own IAM user with this policy:
+
+\`\`\`json
+${SES_KEY_POLICY}
+\`\`\`
+
 - \`GET /senders/{id}\` checks it live: the DNS \`records\` to add, whether it's \`verified\`, and
-  whether the SES account has \`production\` access.
+  whether the SES account has \`production\` access. Add every record, then check again; SES
+  usually verifies the domain within an hour.
 - \`PATCH /senders/{id}\` with \`{ "name"?, "replyTo"? }\`. \`DELETE /senders/{id}\`.
+
+A new SES account is in the sandbox: it sends only to addresses verified in SES, and campaigns
+can't reach your contacts until AWS grants production access. How to request it, and what to do
+after a denial: https://github.com/ivryb/sendr/blob/main/docs/ses-production-access.md
 
 ## Settings (full permission)
 
 - \`GET /settings\`, \`PUT /settings\` with \`{ "footer"?, "publicUrl"? }\`. \`footer\` is Markdown.
+  \`publicUrl\` is this instance's https address, used in unsubscribe links and by SES delivery
+  reports. The admin's first sign-in fills it in; set it yourself if you set up Sendr before that.
 `
 }

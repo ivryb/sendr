@@ -9,6 +9,12 @@ export async function sha256(value: string) {
   return toHex(new Uint8Array(digest))
 }
 
+/** A fresh API key and what's stored for it: a hash and a display prefix, never the key itself. */
+export async function newApiKey() {
+  const key = `sk_${randomToken(24)}`
+  return { key, prefix: key.slice(0, 7), hash: await sha256(key) }
+}
+
 export function timingSafeEqual(a: string, b: string) {
   const left = encoder.encode(a)
   const right = encoder.encode(b)

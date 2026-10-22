@@ -3,14 +3,12 @@ import { desc, eq } from "drizzle-orm"
 import type { ApiKey, ApiKeyPermission } from "../../shared/model"
 import { db } from "../db/client"
 import { apiKeys } from "../db/schema"
-import { randomToken, sha256 } from "../lib/crypto"
+import { newApiKey, sha256 } from "../lib/crypto"
 
 /** Creates a key and returns its secret; only a hash is stored, so this is the one chance to see it. */
 export async function createApiKey(name: string, permissions: ApiKeyPermission[]) {
-  const key = `sk_${randomToken(24)}`
-  await db()
-    .insert(apiKeys)
-    .values({ name, permissions, prefix: key.slice(0, 7), hash: await sha256(key) })
+  const { key, prefix, hash } = await newApiKey()
+  await db().insert(apiKeys).values({ name, permissions, prefix, hash })
   return key
 }
 

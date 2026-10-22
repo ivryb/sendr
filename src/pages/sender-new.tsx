@@ -25,6 +25,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { api, ApiError } from "@/lib/api"
 import type { Sender } from "../../shared/model"
+import { SES_KEY_POLICY } from "../../shared/ses"
 
 const REGIONS = [
   { value: "us-east-1", label: "US East (N. Virginia)" },
@@ -41,24 +42,6 @@ const REGIONS = [
   { value: "ap-northeast-1", label: "Asia Pacific (Tokyo)" },
   { value: "sa-east-1", label: "South America (São Paulo)" },
 ]
-
-// What Sendr does with the key: set up and check SES, send, and route delivery reports
-// through its own SNS topic. Nothing else in the account.
-const POLICY = `{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": "ses:*",
-      "Resource": "*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": ["sns:CreateTopic", "sns:Subscribe"],
-      "Resource": "arn:aws:sns:*:*:sendr-*"
-    }
-  ]
-}`
 
 export default function NewSenderPage() {
   const [step, setStep] = useState<"service" | "connect">("service")
@@ -195,7 +178,7 @@ function ConnectStep() {
             Choose{" "}
             <span className="text-foreground">Attach policies directly</span>,
             create a policy with this JSON, and attach it.
-            <CodeBlock code={POLICY} className="mt-2" />
+            <CodeBlock code={SES_KEY_POLICY} className="mt-2" />
           </li>
           <li>
             Open the user, choose{" "}

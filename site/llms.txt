@@ -1,0 +1,138 @@
+# Sendr
+
+> Sendr is an email tool a person deploys to their own Cloudflare account. It sends campaigns and single emails through their Amazon SES account, and an agent runs it through its API.
+
+The user gave you this link to set Sendr up. Work through the steps in order, running the commands yourself. Each step ends with a check; meet it before you start the next one. Ask the user only for decisions, facts about their business, and approvals.
+
+## 1. Look for an existing instance
+
+List `~/.config/sendr/`. Each `<host>.env` file there is a Sendr instance this machine set up before. If you find one, ask whether the user wants to use it or deploy a new instance for another project (one instance holds one project's contacts). To use an existing one, install the skill from step 9 if it's missing, then follow the skill instead of this guide.
+
+Done when you know you're deploying a new instance.
+
+## 2. Introduce Sendr
+
+Tell the user briefly, in your own words, what they're about to get:
+
+- Their own email tool, running in their Cloudflare account as one Worker with a D1 database and a queue. Contacts, unsubscribes and stats stay with them. It costs almost nothing to run, and SES charges about $0.10 per 1,000 emails.
+- Campaigns written in Markdown, with HTML allowed, merge tags like `{{first_name|there}}`, a live preview, and a footer shared by every campaign. Each campaign goes to a first batch of 200 people, then waits for approval before the rest.
+- Every campaign has a visible unsubscribe link and the one-click unsubscribe button Gmail and Apple Mail show. Addresses that bounced or reported spam never get mail again.
+- Stats for each campaign: delivered, bounced, complained, opened, and clicks per link.
+- Single emails, like receipts and welcome notes, sent from their app through the same API.
+- An API for everything. Their app syncs contacts, and you manage campaigns, senders and settings. There's also an admin app with passkey sign-in, for when they want to look themselves.
+
+Then list what you need from step 3, and wait for their go-ahead.
+
+Done when the user agrees to go ahead.
+
+## 3. Get access
+
+You need:
+
+- Cloudflare, to deploy. Check with `bunx wrangler whoami`. If Wrangler isn't signed in, run `bunx wrangler login`, which opens a browser for the user.
+- Cloudflare DNS, to verify the sending domain. Wrangler's login can't edit DNS. If the sending domain is on Cloudflare, ask the user to connect Cloudflare's API MCP server (`https://mcp.cloudflare.com/mcp`) or give you an API token with Zone > DNS > Edit for that zone. Without either, the user adds the records at their DNS host from the list you give them.
+- AWS, to set up SES. Check with `aws sts get-caller-identity`. You need the account that will send, with rights to create IAM users and manage SES. An AWS MCP server that runs IAM and SES calls works too. A user with no AWS account creates one at https://aws.amazon.com first.
+- `git` and `bun` (https://bun.sh).
+
+Ask the user for:
+
+- Their email. They sign in to Sendr with it, and nobody else can.
+- Sendr's own address, a subdomain of a domain in their Cloudflare account, like `emails.acme.com`. Unsubscribe links use it, so pick one they'll keep. If none of their domains are on Cloudflare, Sendr runs on the `workers.dev` address Wrangler gives it.
+- The From name and address, like `Acme <news@acme.com>`, and an AWS region near their users (`us-east-1` if they don't mind).
+- Their company name and postal address for the footer. Anti-spam laws require an address.
+- Where to keep the Sendr checkout. Updates deploy from it.
+
+Done when `bunx wrangler whoami` and `aws sts get-caller-identity` both succeed and you have every answer.
+
+## 4. Deploy
+
+```sh
+git clone https://github.com/ivryb/sendr.git
+cd sendr
+bun install
+bunx wrangler queues create sendr-send
+bunx react-router build && bunx wrangler deploy --domain emails.acme.com && bunx wrangler d1 migrations apply DB --remote
+printf '%s' 'ann@acme.com' | bunx wrangler secret put ADMIN_EMAIL
+```
+
+The first deploy creates the D1 database. Without a Cloudflare domain, drop `--domain` and use the `workers.dev` address it prints. The domain stays attached, so later deploys are `bun run deploy`.
+
+Done when `curl -s https://emails.acme.com/api/v1/docs` returns the API reference. A new custom domain can take a few minutes to get its certificate.
+
+## 5. Give yourself an API key
+
+From the checkout:
+
+```sh
+bun run api-key https://emails.acme.com --save
+```
+
+This creates a full-access key in the instance's database and saves it to `~/.config/sendr/emails.acme.com.env` as `SENDR_URL`, `SENDR_API_KEY` and `SENDR_CHECKOUT`. Your shell may not keep variables between commands, so load the file in every command that calls the API:
+
+```sh
+set -a; . ~/.config/sendr/emails.acme.com.env; set +a
+curl -s "$SENDR_URL/api/v1/me" -H "Authorization: Bearer $SENDR_API_KEY"
+```
+
+Read `$SENDR_URL/api/v1/docs` now. It's the API reference for the rest of the setup. Then save the instance's address in settings with `PUT /settings` and `{ "publicUrl": "https://emails.acme.com" }`. Unsubscribe links and SES delivery reports use it.
+
+Done when `GET /me` returns `"permissions":["full"]` and `GET /settings` returns the `publicUrl`.
+
+## 6. Add the sender
+
+1. Create an IAM user for this instance with the policy from the Senders section of the API reference, then an access key for it. Use `aws iam create-user`, `aws iam put-user-policy` and `aws iam create-access-key`. A new key takes about ten seconds to start working. Delete any policy file you wrote.
+2. `POST /senders` with the name, address, region and the key.
+3. `GET /senders/{id}` lists the DNS records SES needs. Add every one; on Cloudflare, set them to DNS only, not proxied. If the domain has no DMARC record, add a TXT record at `_dmarc` with `v=DMARC1; p=none`. Check the sender every few minutes until it's verified. That usually takes under an hour.
+
+Done when `GET /senders/{id}` returns `"verified": true`.
+
+## 7. Request SES production access
+
+If the sender shows `"production": false`, the SES account is in its sandbox. It only sends to addresses verified in SES, so campaigns can't reach contacts yet. AWS grants production access on request, and it often denies vague requests. Read `docs/ses-production-access.md` in the checkout. Draft the request with the user, since it describes their business. Take the facts from them and show them the final text before you submit it with `aws sesv2 put-account-details`.
+
+AWS usually answers within a day, so carry on without waiting. To test in the meantime, verify the user's own address with `aws sesv2 create-email-identity` and ask them to click the link AWS emails them.
+
+Done when the request is submitted, or the sender already shows `"production": true`.
+
+## 8. Send a test
+
+Set the footer with `PUT /settings` (`footer` in Markdown, with the company name and postal address; Sendr adds the unsubscribe link below it). Create a short draft with `POST /campaigns`, send it to the user with `POST /campaigns/{id}/test`, and delete the draft after.
+
+Done when the user confirms the test arrived and looks right.
+
+## 9. Install the Sendr skill
+
+Future sessions find Sendr through a skill. Save the text below as `SKILL.md` in a `sendr` folder in the user's skills directory: `~/.claude/skills/sendr/` for Claude Code, `~/.agents/skills/sendr/` for Codex. For any other agent, save it where that agent keeps user-level skills or instructions. The skill holds no secrets; it reads them from `~/.config/sendr/`.
+
+```markdown
+---
+name: sendr
+description: Sendr, the user's own email tool on Cloudflare and Amazon SES. Use when they want to email their users, write, send or analyze a campaign, send a single email, or manage contacts, senders or Sendr itself.
+---
+
+# Sendr
+
+Each `~/.config/sendr/<host>.env` file is a Sendr instance you can use. It sets `SENDR_URL` (the instance, where the admin app also lives), `SENDR_API_KEY` (a full-access API key) and `SENDR_CHECKOUT` (the git checkout it deploys from). With several, pick by host or ask which project. Shell variables may not last between commands, so load the file in every command that calls the API:
+
+    set -a; . ~/.config/sendr/<host>.env; set +a
+    curl -s "$SENDR_URL/api/v1/me" -H "Authorization: Bearer $SENDR_API_KEY"
+
+Read `$SENDR_URL/api/v1/docs` before your first call in a session. It's the API reference.
+
+Starting a campaign emails real people, and approving it emails everyone. Before either, send the user a test with `POST /campaigns/{id}/test` and tell them how many subscribed contacts it goes to. Start or approve only when they say so.
+
+- Update Sendr: `cd "$SENDR_CHECKOUT" && git pull && bun install && bun run deploy`.
+- A key for the user's app: `bun run api-key "$SENDR_URL" --name "<app> backend" --permissions contacts,emails` in the checkout prints one.
+- SES production access, including what to do after a denial: `$SENDR_CHECKOUT/docs/ses-production-access.md`.
+```
+
+Done when the file is saved.
+
+## 10. Hand over
+
+Tell the user:
+
+- Their Sendr address. They sign in there with their email and add a passkey. Until their own sender can email them, sendr.soy delivers the login code.
+- What they can ask you now, for example: "draft this month's product update", "how did last week's campaign do?", "send a welcome email when someone signs up".
+- How their app connects. Its backend needs a key with the contacts and emails permissions, which `bun run api-key https://emails.acme.com --name "Acme backend" --permissions contacts,emails` prints. With it, the app syncs each user with `PUT /contacts/{userId}` and sends single emails with `POST /emails`. Offer to wire this up in their app.
+- What's still pending, like DNS verification or the SES production access request.

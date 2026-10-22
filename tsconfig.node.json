@@ -23,6 +23,7 @@
     "vite.config.ts",
     "vitest.config.ts",
     "drizzle.config.ts",
-    "react-router.config.ts"
+    "react-router.config.ts",
+    "scripts"
   ]
 }

@@ -14,12 +14,33 @@ Sendr is single-tenant: one deployment is one contact list, sent to from one or 
 
 ## Deploy
 
+### With an agent
+
+Paste this into Claude Code, Codex or another coding agent:
+
+```
+Set up Sendr for me: https://sendr.soy/llms.txt
+```
+
+The guide there has the agent explain Sendr, check it can reach your Cloudflare and AWS accounts, deploy, set up SES and send you a test. It gives itself an API key, saved in `~/.config/sendr/`, and installs a `sendr` skill so later sessions can run campaigns for you. The guide is [`site/llms.txt`](site/llms.txt).
+
+### By hand
+
 1. Click **Deploy to Cloudflare** above. Cloudflare copies this repo into your GitHub account, creates the D1 database and queue, and asks for `ADMIN_EMAIL`: your email. You sign in with it; nobody else can.
 2. Add a custom domain to the Worker (Workers & Pages > sendr > Settings > Domains & Routes), for example `emails.example.com`. Unsubscribe links use it, so pick one you'll keep. Sign in on this domain, not on `workers.dev`: passkeys only work on the domain they were created on, and the first sign-in saves it as the address for unsubscribe links.
 3. Open the domain and sign in with your email. Until Sendr can send email itself, sendr.soy delivers your login code (see [Login codes](#login-codes)). Add a passkey when asked.
 4. Add a sender in **Senders** (below), then create an API key on the **API** page and push your contacts.
 
-To deploy by hand instead: clone the repo, `bun install`, `bunx wrangler queues create sendr-send`, then `bun run deploy -- --domain emails.example.com`. The first deploy creates the D1 database and applies migrations. Then set your email with `bunx wrangler secret put ADMIN_EMAIL`.
+To deploy from a terminal instead, clone the repo and run:
+
+```sh
+bun install
+bunx wrangler queues create sendr-send
+bunx react-router build && bunx wrangler deploy --domain emails.example.com && bunx wrangler d1 migrations apply DB --remote
+bunx wrangler secret put ADMIN_EMAIL
+```
+
+The first deploy creates the D1 database. The domain stays attached, so later deploys are `bun run deploy`.
 
 ## Add a sender
 
@@ -44,7 +65,13 @@ Create keys on the **API** page and tick what each one may do:
 
 An app's backend usually gets Contacts, Emails or both.
 
-Only the signed-in admin can create or revoke keys.
+Only the signed-in admin can create or revoke keys in the app. Anyone with Wrangler access to the Cloudflare account can also create one from the checkout, which is how an agent gets its key before anyone signs in:
+
+```sh
+bun run api-key https://emails.example.com --name "Acme backend" --permissions contacts,emails
+```
+
+It prints the key. Without `--permissions` the key has full access, and `--save` stores it in `~/.config/sendr/<host>.env` for agents on this machine.
 
 ### Push contacts from your app
 
