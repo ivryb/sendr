@@ -74,7 +74,7 @@ curl -X POST ${api}/emails \\
 
 ## Campaigns (full permission)
 
-A campaign is Markdown sent to every subscribed contact. Merge tags fill in contact data with a
+A campaign is Markdown sent to every subscribed contact; raw HTML inside it is kept as is. Merge tags fill in contact data with a
 fallback: \`{{first_name|there}}\`, \`{{fields.plan|free}}\`. Starting a campaign sends it to the
 first batch (\`firstBatchSize\`, 200 by default), then pauses at \`awaiting_approval\` so a human
 can check bounces and complaints. Approve only if fewer than about 5% bounced and 0.1% complained.
