@@ -29,7 +29,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     links,
     senders,
     footer: settings.footer,
-    subscribed: counts.subscribed ?? 0,
+    subscribed: counts.subscribed,
   }
 }
 

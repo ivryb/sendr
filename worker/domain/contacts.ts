@@ -29,17 +29,21 @@ export async function upsertContact(
   }
 
   const existing = byExternalId ?? byEmail
-  const unsubscribe =
-    input.unsubscribed && (!existing || existing.status === "subscribed")
+  // A bounce belongs to the address, so a corrected email can get mail again. Unsubscribes and
+  // complaints belong to the person and stay.
+  const newAddress = existing?.status === "bounced" && existing.email !== input.email
+  const status: ContactStatus | undefined =
+    input.unsubscribed && (!existing || existing.status === "subscribed" || newAddress)
+      ? "unsubscribed"
+      : newAddress
+        ? "subscribed"
+        : undefined
   const values = {
     externalId,
     email: input.email,
     ...(input.firstName !== undefined && { firstName: input.firstName }),
     ...(input.fields && { fields: input.fields }),
-    ...(unsubscribe && {
-      status: "unsubscribed" as const,
-      statusChangedAt: new Date(),
-    }),
+    ...(status && { status, statusChangedAt: new Date() }),
   }
 
   if (existing) {
@@ -106,7 +110,14 @@ export async function contactCounts() {
     .select({ status: contacts.status, count: sql<number>`count(*)` })
     .from(contacts)
     .groupBy(contacts.status)
-  return Object.fromEntries(rows.map((row) => [row.status, row.count]))
+  const counts: Record<ContactStatus, number> = {
+    subscribed: 0,
+    unsubscribed: 0,
+    bounced: 0,
+    complained: 0,
+  }
+  for (const row of rows) counts[row.status] = row.count
+  return counts
 }
 
 /**

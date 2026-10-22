@@ -68,7 +68,7 @@ export async function loader({ url }: Route.LoaderArgs) {
   }
   const [list, counts, settings] = await Promise.all([
     listContacts({ ...filter, limit: PAGE_SIZE }),
-    contactCounts() as Promise<Partial<Record<ContactStatus, number>>>,
+    contactCounts(),
     getSettings(),
   ])
   return { ...list, counts, filter, origin: settings.publicUrl || url.origin }
@@ -118,7 +118,7 @@ export default function ContactsPage({ loaderData }: Route.ComponentProps) {
   }
   // A search still waiting to run must not pull the admin back here after they leave.
   useEffect(() => () => clearTimeout(searchTimer.current), [])
-  const everyone = Object.values(counts).reduce((sum, n) => sum + (n ?? 0), 0)
+  const everyone = Object.values(counts).reduce((sum, n) => sum + n, 0)
 
   if (everyone === 0) {
     return (
@@ -138,7 +138,7 @@ export default function ContactsPage({ loaderData }: Route.ComponentProps) {
     ...CONTACT_STATUSES.map((value) => ({
       value,
       label: CONTACT_STATUS[value].label,
-      count: counts[value] ?? 0,
+      count: counts[value],
     })),
   ]
 

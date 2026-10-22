@@ -169,6 +169,22 @@ describe("provider events", () => {
     expect(await contactStatus("bob@example.com")).toBe("complained")
   })
 
+  it("a corrected email gets a bounced contact mail again, but a complaint stays", async () => {
+    const id = await sendCampaign()
+    await postSesEvent(
+      sesEvent("Bounce", await messageIdFor(id, "ann@example.com"), {
+        bounce: { bounceType: "Permanent" },
+      })
+    )
+    await postSesEvent(sesEvent("Complaint", await messageIdFor(id, "bob@example.com")))
+    const put = (externalId: string, email: string) =>
+      request(`/api/v1/contacts/${externalId}`, { method: "PUT", bearer: apiKey, json: { email } })
+    await put("u1", "ann@fixed.example.com")
+    await put("u2", "bob@new.example.com")
+    expect(await contactStatus("ann@fixed.example.com")).toBe("subscribed")
+    expect(await contactStatus("bob@new.example.com")).toBe("complained")
+  })
+
   it("the contacts API can't resubscribe a bounced contact", async () => {
     const id = await sendCampaign()
     await postSesEvent(
