@@ -34,19 +34,19 @@ export function EmailPreview({
 }) {
   const me = useAdmin()
   const debouncedSubject = useDebounced(subject)
-  const debouncedBody = useDebounced(body)
+  // Together, so a format switch doesn't render the old body in the new format.
+  const message = useDebounced(useMemo(() => ({ format, body }), [format, body]))
   const debouncedFooter = useDebounced(footer)
   const email = useMemo(
     () =>
       renderEmail({
         subject: debouncedSubject,
-        format,
-        body: debouncedBody,
+        ...message,
         footer: debouncedFooter,
         recipient: { firstName: me.name.split(" ")[0] || null, fields: {} },
         unsubscribeUrl: "#",
       }),
-    [debouncedSubject, format, debouncedBody, debouncedFooter, me.name]
+    [debouncedSubject, message, debouncedFooter, me.name]
   )
   const [scheme, setScheme] = usePreviewScheme()
   const dark = scheme === "dark"
