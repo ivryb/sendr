@@ -14,12 +14,12 @@ Done when you know you're deploying a new instance.
 
 Tell the user briefly, in your own words, what they're about to get:
 
-- Their own email tool, running in their Cloudflare account as one Worker with a D1 database and a queue. Contacts, unsubscribes and stats stay with them. It costs almost nothing to run, and SES charges about $0.10 per 1,000 emails.
-- Campaigns written in Markdown, with HTML allowed, merge tags like `{{first_name|there}}`, a live preview, and a footer shared by every campaign. Each campaign goes to a first batch of 200 people, then waits for approval before the rest.
+- Their own email tool, running in their Cloudflare account as one Worker with a D1 database, a queue and an R2 bucket for images and video. Contacts, unsubscribes and stats stay with them. It costs almost nothing to run, and SES charges about $0.10 per 1,000 emails.
+- Campaigns written in a rich editor with images, GIFs, and video and audio cards, or in their own HTML or plain text. Merge tags like `{{first_name|there}}`, a live preview in light and dark, and a footer shared by every campaign. Each campaign goes to a first batch of 200 people, then waits for approval before the rest.
 - Every campaign has a visible unsubscribe link and the one-click unsubscribe button Gmail and Apple Mail show. Addresses that bounced or reported spam never get mail again.
 - Stats for each campaign: delivered, bounced, complained, opened, and clicks per link.
 - Single emails, like receipts and welcome notes, sent from their app through the same API.
-- An API for everything. Their app syncs contacts, and you manage campaigns, senders and settings. There's also an admin app with passkey sign-in, for when they want to look themselves.
+- An API for everything. Their app syncs contacts, and you manage campaigns, senders and settings, and show them a picture of each campaign before it goes out. There's also an admin app with passkey sign-in, for when they want to look themselves.
 
 Then list what you need from step 3, and wait for their go-ahead.
 
@@ -46,6 +46,8 @@ Done when `bunx wrangler whoami` and `aws sts get-caller-identity` both succeed 
 
 ## 4. Deploy
 
+Sendr keeps uploaded images and video in R2, which a Cloudflare account turns on once. Check with `bunx wrangler r2 bucket list`. If it fails saying R2 isn't enabled, ask the user to open R2 in the Cloudflare dashboard and turn it on; it may ask for a payment method, though the first 10 GB are free. Do this before the first deploy.
+
 ```sh
 git clone https://github.com/ivryb/sendr.git
 cd sendr
@@ -55,9 +57,11 @@ bunx react-router build && bunx wrangler deploy --domain emails.acme.com && bunx
 printf '%s' 'ann@acme.com' | bunx wrangler secret put ADMIN_EMAIL
 ```
 
-The first deploy creates the D1 database. Without a Cloudflare domain, drop `--domain` and use the `workers.dev` address it prints. The domain stays attached, so later deploys are `bun run deploy`.
+The first deploy creates the D1 database and the R2 bucket. Without a Cloudflare domain, drop `--domain` and use the `workers.dev` address it prints. The domain stays attached, so later deploys are `bun run deploy`.
 
-Each instance has its own checkout. The Worker, database and queue names in `wrangler.jsonc` are fixed, so a second instance in the same Cloudflare account would replace the first. Before deploying a second one, give it its own names: the Worker `name`, the D1 `database_name`, and the queue in both `producers` and `consumers` (for example `sendr-acme`, `sendr-acme` and `sendr-acme-send`). Create that queue instead of `sendr-send`, and commit the change in the checkout so `git pull` merges later updates.
+Each instance has its own checkout. The Worker, database, bucket and queue names in `wrangler.jsonc` are fixed, so a second instance in the same Cloudflare account would replace the first. Before deploying a second one, give it its own names: the Worker `name`, the D1 `database_name`, the R2 `bucket_name`, and the queue in both `producers` and `consumers` (for example `sendr-acme`, `sendr-acme`, `sendr-acme-media` and `sendr-acme-send`). Create that queue instead of `sendr-send`, and commit the change in the checkout so `git pull` merges later updates.
+
+Campaign previews run a browser through Cloudflare Browser Run, which needs no setup. On the Workers Free plan it allows a new browser every 20 seconds and 10 browser-minutes a day, plenty for previews.
 
 Done when `curl -s https://emails.acme.com/api/v1/docs` returns the API reference. A new custom domain can take a few minutes to get its certificate.
 
@@ -98,7 +102,7 @@ Done when the request is submitted, or the sender already shows `"production": t
 
 ## 8. Send a test
 
-Set the footer with `PUT /settings` (`footer` in Markdown, with the company name and postal address; Sendr adds the unsubscribe link below it). Create a short draft with `POST /campaigns`, send it to the user with `POST /campaigns/{id}/test`, and delete the draft after.
+Set the footer with `PUT /settings` (`footer` in Markdown, with the company name and postal address; Sendr adds the unsubscribe link below it). Create a short draft with `POST /campaigns` and show the user its picture from `GET /campaigns/{id}/screenshot` (the skill in step 9 shows how). Then send it to them with `POST /campaigns/{id}/test`, and delete the draft after.
 
 Done when the user confirms the test arrived and looks right.
 
@@ -121,7 +125,13 @@ Each `~/.config/sendr/<host>.env` file is a Sendr instance you can use. It sets 
 
 Read `$SENDR_URL/api/v1/docs` before your first call in a session. It's the API reference.
 
-Starting a campaign emails real people, and approving it emails everyone. Before either, send the user a test with `POST /campaigns/{id}/test` and tell them how many subscribed contacts it goes to. Start or approve only when they say so.
+Write campaigns in the `editor` format, with the tags listed under Campaigns in the API reference. Upload images, GIFs, video and audio with `POST /media` and use the URLs it returns; for a video, upload its poster image first.
+
+Starting a campaign emails real people, and approving it emails everyone. Before either, show the user the campaign's screenshot, send them a test with `POST /campaigns/{id}/test`, and tell them how many subscribed contacts it goes to. Start or approve only when they say so. To get the screenshot, light and dark side by side:
+
+    curl -s "$SENDR_URL/api/v1/campaigns/<id>/screenshot" -H "Authorization: Bearer $SENDR_API_KEY" -o /tmp/sendr-preview.png
+
+Look at it yourself, then show it to the user: embed it in your reply if your interface renders images (`![Preview](/tmp/sendr-preview.png)`), or open it for them with `open` (macOS) or `xdg-open` (Linux).
 
 - Update Sendr: `cd "$SENDR_CHECKOUT" && git pull && bun install && bun run deploy`.
 - A key for the user's app: `bun run api-key "$SENDR_URL" --name "<app> backend" --permissions contacts,emails` in the checkout prints one.
