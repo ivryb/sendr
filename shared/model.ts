@@ -86,6 +86,23 @@ export type Campaign = {
   counts: CampaignCounts
 }
 
+export const MEDIA_KINDS = ["image", "video", "audio"] as const
+export type MediaKind = (typeof MEDIA_KINDS)[number]
+
+/** An uploaded file campaigns can show or link to. `url` is public and absolute, for emails. */
+export type Media = {
+  id: string
+  kind: MediaKind
+  name: string
+  contentType: string
+  size: number
+  url: string
+  /** A video's or audio's cover image. */
+  posterUrl: string | null
+  durationSeconds: number | null
+  createdAt: string
+}
+
 export type Contact = {
   id: string
   externalId: string | null

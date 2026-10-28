@@ -9,6 +9,7 @@ import { DomainError } from "./lib/errors"
 import { getSettings } from "./lib/settings"
 import { api } from "./routes/api"
 import { hooks } from "./routes/hooks"
+import { media } from "./routes/media"
 import { tracking } from "./routes/tracking"
 import { unsubscribe } from "./routes/unsubscribe"
 
@@ -20,6 +21,7 @@ const app = new Hono<{ Bindings: Env }>()
   .route("/api/v1", api)
   .route("/hooks", hooks)
   .route("/u", unsubscribe)
+  .route("/media", media)
   .route("/", tracking)
   .onError((error, c) => {
     if (error instanceof HTTPException) return error.getResponse()

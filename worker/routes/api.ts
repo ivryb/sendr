@@ -26,6 +26,7 @@ import {
   upsertContact,
 } from "../domain/contacts"
 import { emailInput, getEmail, sendSingleEmail } from "../domain/emails"
+import { mediaQuery, uploadMedia } from "../domain/media"
 import {
   checkSender,
   connectSender,
@@ -198,6 +199,19 @@ export const api = new Hono<ApiEnv>()
   .post("/campaigns/:id/cancel", requires("full"), async (c) => {
     await cancelCampaign(c.req.param("id"))
     return c.json({ campaign: await getCampaign(c.req.param("id")) })
+  })
+
+  // Media: the raw body is the file, streamed to storage rather than parsed as a form.
+  .post("/media", requires("full"), async (c) => {
+    const query = parseQuery(c, mediaQuery)
+    const { publicUrl } = await getSettings()
+    const upload = {
+      ...query,
+      contentType: c.req.header("content-type") ?? "",
+      size: Number(c.req.header("content-length")),
+      body: c.req.raw.body,
+    }
+    return c.json({ media: await uploadMedia(upload, publicUrl || new URL(c.req.url).origin) }, 201)
   })
 
   // Senders

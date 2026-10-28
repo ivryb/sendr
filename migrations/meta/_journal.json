@@ -50,6 +50,13 @@
       "when": 1793178310200,
       "tag": "0006_campaign_formats",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793179085917,
+      "tag": "0007_media",
+      "breakpoints": true
     }
   ]
 }

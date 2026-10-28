@@ -96,7 +96,8 @@ Statuses: draft, first_batch, awaiting_approval, sending, sent, cancelled.
 - \`GET /campaigns\`, \`GET /campaigns/{id}\` (with delivery \`counts\`). \`GET /campaigns/{id}\`
   also returns \`links\`: \`[{ "url", "clicks" }]\`, most clicked first.
 - \`POST /campaigns\` with \`{ "subject"?, "format"?, "body"?, "senderId"?, "firstBatchSize"? }\` (or
-  \`markdown\` instead of \`format\` and \`body\`) creates a draft. Without \`senderId\` it uses the first verified sender, or the first sender while none is.
+  \`markdown\` instead of \`format\` and \`body\`) creates a draft. Without \`senderId\` it uses the first
+  verified sender, or the first sender while none is.
 - \`PUT /campaigns/{id}\` edits a draft. \`DELETE /campaigns/{id}\` deletes a draft.
 - \`POST /campaigns/{id}/test\` with \`{ "to": "you@example.com" }\` sends one test copy. \`to\` is
   required with an API key.
@@ -108,7 +109,25 @@ Campaign emails track opens and clicks: links go through the instance, and an in
 records the open. \`counts.opened\` and \`counts.clicked\` are recipients who opened or clicked at
 least once (a click counts as an open), and each link's \`clicks\` counts each recipient once.
 Apple Mail Privacy Protection preloads images, so opens are an overestimate and clicks are the
-reliable signal. Test sends and single emails aren't tracked.
+reliable signal. Text campaigns have no image, so only their clicks count. Test sends and single
+emails aren't tracked.
+
+## Media (full permission)
+
+Images, GIFs, video and audio for campaigns, stored by the instance and served from public URLs.
+
+- \`POST /media?name=<file name>\` with the file's bytes as the body (not a form) and its MIME type
+  as \`Content-Type\`: \`image/*\` (not SVG), \`video/*\` or \`audio/*\`, else \`415\`. Up to 100 MB (\`413\`);
+  \`Content-Length\` is required (\`411\`). Optional \`poster=<image media id>\` (a video's or audio's
+  cover) and \`duration=<seconds>\`. Returns 201 with \`{ "media": { "id", "kind", "url", "posterUrl",
+  "durationSeconds", ... } }\`.
+- \`url\` is absolute and public: use it as an \`img src\` or a media card's \`data-src\`/\`data-poster\`.
+
+\`\`\`sh
+curl -X POST "${api}/media?name=demo.mp4" \\
+  -H "Authorization: Bearer $SENDR_API_KEY" -H "Content-Type: video/mp4" \\
+  --data-binary @demo.mp4
+\`\`\`
 
 ## Senders (full permission)
 

@@ -4,6 +4,7 @@ import {
   integer,
   primaryKey,
   real,
+  type AnySQLiteColumn,
   sqliteTable,
   text,
   uniqueIndex,
@@ -16,6 +17,7 @@ import {
   CONTACT_STATUSES,
   DELIVERY_STATUSES,
   EMAIL_STATUSES,
+  MEDIA_KINDS,
 } from "../../shared/model"
 
 export * from "./authSchema"
@@ -159,6 +161,19 @@ export const emails = sqliteTable(
     index("emails_to_idx").on(table.to),
   ]
 )
+
+/** Uploaded files. The bytes live in the MEDIA bucket under `key`. */
+export const media = sqliteTable("media", {
+  id: id(),
+  kind: text("kind", { enum: MEDIA_KINDS }).notNull(),
+  name: text("name").notNull(),
+  contentType: text("content_type").notNull(),
+  size: integer("size").notNull(),
+  key: text("key").notNull(),
+  posterId: text("poster_id").references((): AnySQLiteColumn => media.id, { onDelete: "set null" }),
+  durationSeconds: real("duration_seconds"),
+  createdAt: createdAt(),
+})
 
 export const apiKeys = sqliteTable("api_keys", {
   id: id(),
