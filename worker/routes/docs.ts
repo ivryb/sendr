@@ -86,7 +86,7 @@ A campaign is a message sent to every subscribed contact. Its \`body\` is writte
   - Video card: \`<figure data-media="video" data-src="URL" data-poster="URL" data-title="Title" data-duration="2:14"></figure>\`.
     Email can't play video, so it shows the poster with a play badge and links to \`data-src\`.
   - Audio card: the same with \`data-media="audio"\` and no poster.
-  Only \`data-src\` is required on a card. Upload files under Media first and use their URLs.
+  Only \`data-src\` is required on a card. Upload files with \`POST /media\` (below) and use their URLs.
 - \`html\`: your own HTML, a full document or a fragment, sent as written with the footer added.
 - \`text\`: plain text, sent without an HTML part.
 
