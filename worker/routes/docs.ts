@@ -78,15 +78,18 @@ A campaign is a message sent to every subscribed contact. Its \`body\` is writte
 \`format\`s:
 
 - \`editor\` (default): a small HTML subset that Sendr lays out for email clients, light and dark.
-  Sendr styles these itself, so leave out \`style\` and \`class\`. Other tags pass through unstyled.
+  Sendr styles these itself, so leave out \`style\` and \`class\`. Other tags are sent as written,
+  unstyled, but an edit in the admin app's editor keeps only these.
   - Text: \`h1\`-\`h3\`, \`p\`, \`strong\`, \`em\`, \`u\`, \`s\`, \`a href\`, \`ul\`/\`ol\`/\`li\`, \`blockquote\`, \`hr\`, \`br\`.
-  - Image or GIF, as its own block: \`<img src="URL" alt="What it shows" width="1200">\`. It fills the
+  - Image or GIF, as its own block: \`<img src="URL" alt="What it shows" width="1200">\`. Give it a
+    \`width\`, its width in pixels: Outlook shows an image without one at full size. It fills the
     600px column at most.
   - Button: \`<a data-button href="URL">Label</a>\`, as its own block.
   - Video card: \`<figure data-media="video" data-src="URL" data-poster="URL" data-title="Title" data-duration="2:14"></figure>\`.
     Email can't play video, so it shows the poster with a play badge and links to \`data-src\`.
   - Audio card: the same with \`data-media="audio"\` and no poster.
-  Only \`data-src\` is required on a card. Upload files with \`POST /media\` (below) and use their URLs.
+  A card needs \`data-media\` and \`data-src\`; the rest are optional. Upload files with
+  \`POST /media\` (below) and use their URLs.
 - \`html\`: your own HTML, a full document or a fragment, sent as written with the footer added.
 - \`text\`: plain text, sent without an HTML part.
 

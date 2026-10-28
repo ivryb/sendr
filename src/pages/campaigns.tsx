@@ -148,7 +148,7 @@ function GettingStarted({
     {
       done: false,
       title: "Write your first campaign",
-      body: "Write in Markdown and watch the real email take shape beside it.",
+      body: "Write in the editor and watch the real email take shape beside it.",
       action: (
         <button type="button" onClick={onCreate} className={STEP_ACTION}>
           New campaign

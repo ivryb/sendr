@@ -84,12 +84,13 @@ export default function ApiPage({ loaderData }: Route.ComponentProps) {
   }'`}
         </Example>
         <Example title="Send a campaign">
-          {`# Create a draft. It's sent from your first verified sender.
+          {`# Create a draft in the editor's HTML; the API reference lists its tags, and
+# "markdown" works too. It's sent from your first verified sender.
 curl -X POST ${baseUrl}/campaigns \\
   ${auth} ${json} \\
   -d '{
     "subject": "October update",
-    "markdown": "Hi {{first_name|there}}, here is what shipped."
+    "body": "<h2>Hi {{first_name|there}},</h2><p>Here is what shipped.</p>"
   }'
 
 # Start it with the id from the reply. Sendr sends the first batch,
