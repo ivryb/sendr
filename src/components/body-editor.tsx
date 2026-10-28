@@ -17,7 +17,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { CAMPAIGN_FORMATS, type CampaignFormat } from "../../shared/model"
 import { bodyToText, editorBodyToHtml, markdownToHtml } from "../../shared/render"
 
-const RichEditor = lazy(() => import("@/components/editor/rich-editor"))
+// The server renders a stand-in, so the editor stays out of the Worker's bundle.
+const RichEditor = import.meta.env.SSR
+  ? () => null
+  : lazy(() => import("@/components/editor/rich-editor"))
 
 const LABELS: Record<CampaignFormat, string> = {
   editor: "Editor",

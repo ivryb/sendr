@@ -179,7 +179,7 @@ export function CampaignEditor({
           footer={footerSave.value.footer}
           grow
           className={cn(
-            "max-lg:-mx-4 max-lg:rounded-none max-lg:ring-0 sm:max-lg:-mx-8 lg:sticky lg:top-6 lg:h-[max(30.5rem,calc(100svh-16.5rem))]",
+            "max-lg:-mx-4 max-lg:rounded-none max-lg:ring-0 sm:max-lg:-mx-8 lg:sticky lg:top-6 lg:h-[max(30.75rem,calc(100svh-16.25rem))]",
             tab !== "preview" && "hidden lg:flex"
           )}
         />
