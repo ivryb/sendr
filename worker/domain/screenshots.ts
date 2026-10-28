@@ -64,7 +64,7 @@ async function shoot(content: string, width: number) {
   try {
     const tab = await browser.newPage()
     await tab.setViewport({ width, height: 400, deviceScaleFactor: 2 })
-    // The panes set their own schemes; this keeps the page from following the host's.
+    // Pinned, or the page follows the host's setting; the dark pane's swapped queries need light.
     await tab.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }])
     await tab.setContent(content, { waitUntil: "load" })
     return new Uint8Array(await tab.screenshot({ type: "png", fullPage: true }))
