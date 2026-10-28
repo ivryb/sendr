@@ -87,8 +87,12 @@ const MediaCard = Node.create({
     title: dataAttribute("title", null),
     duration: dataAttribute("duration", null),
   }),
-  // Above the starter kit's catch-all block parsing.
-  parseHTML: () => [{ tag: "figure[data-media]", priority: 1000 }],
+  // The figure is the stored body's; the link is the card in an HTML document. Both rank above
+  // the starter kit's catch-all block parsing and the link mark.
+  parseHTML: () => [
+    { tag: "figure[data-media]", priority: 1000 },
+    { tag: "a[data-media][data-src]", priority: 1000 },
+  ],
   renderHTML: ({ HTMLAttributes }) => ["figure", HTMLAttributes],
   addNodeView: () => mediaCardView,
 })

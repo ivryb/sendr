@@ -280,6 +280,8 @@ function button(node: Element) {
     "a",
     {
       href: node.attribs.href,
+      // Kept so the editor reads the button back from the HTML document.
+      "data-button": "",
       class: "sendr-button",
       style: `display:inline-block;padding:12px 24px;${fill}color:${LIGHT.bg};font-size:16px;font-weight:600;line-height:1.25;text-decoration:none;`,
     },
@@ -311,9 +313,9 @@ function videoCard(media: MediaAttributes, src: string) {
     badge
   )
   const caption = mediaCaption(media, "")
-  return tag(
-    "a",
-    { href: src, style: "display:block;margin:0 0 16px;text-decoration:none;" },
+  return cardLink(
+    media,
+    src,
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;"><tr>${frame}</tr></table>${
       caption && `<p class="sendr-text" style="margin:10px 0 0;color:${LIGHT.text};line-height:1.4;">${caption}</p>`
     }`
@@ -323,11 +325,19 @@ function videoCard(media: MediaAttributes, src: string) {
 /** A compact row: play circle, title, duration; the whole card links to the audio. */
 function audioCard(media: MediaAttributes, src: string) {
   const circle = `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td aria-hidden="true" class="sendr-button" width="40" height="40" align="center" valign="middle" bgcolor="${LIGHT.text}" style="width:40px;height:40px;border-radius:20px;background-color:${LIGHT.text};color:${LIGHT.bg};font-size:14px;line-height:40px;text-indent:2px;">${PLAY}</td></tr></table>`
-  return tag(
-    "a",
-    { href: src, style: "display:block;margin:0 0 16px;text-decoration:none;" },
+  return cardLink(
+    media,
+    src,
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="sendr-border" style="border:1px solid ${LIGHT.border};border-radius:12px;border-collapse:separate;"><tr><td width="52" style="width:40px;padding:12px 0 12px 12px;">${circle}</td><td class="sendr-text" style="padding:12px 16px 12px 12px;color:${LIGHT.text};line-height:1.4;">${mediaCaption(media, "Listen")}</td></tr></table>`
   )
+}
+
+const CARD_DATA = ["data-media", "data-src", "data-poster", "data-title", "data-duration"]
+
+/** The card's link, carrying the card's attributes so the editor reads it back as a card. */
+function cardLink(media: MediaAttributes, src: string, inner: string) {
+  const data = Object.fromEntries(CARD_DATA.map((name) => [name, media[name]]))
+  return tag("a", { href: src, ...data, style: "display:block;margin:0 0 16px;text-decoration:none;" }, inner)
 }
 
 // U+FE0E keeps iOS from drawing the triangle as an emoji.

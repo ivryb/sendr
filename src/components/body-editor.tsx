@@ -156,6 +156,10 @@ function documentBody(html: string) {
   const doc = new DOMParser().parseFromString(html, "text/html")
   doc.querySelectorAll("style, script, [aria-hidden=true]").forEach((element) => element.remove())
   doc.querySelectorAll("[style]").forEach((element) => element.removeAttribute("style"))
+  // The renderer writes the editor's blank line as a lone &nbsp;, so it reads back as one.
+  doc.querySelectorAll("p").forEach((paragraph) => {
+    if (paragraph.innerHTML === "&nbsp;") paragraph.replaceChildren()
+  })
   return doc.body.innerHTML
 }
 
