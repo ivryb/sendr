@@ -14,6 +14,7 @@ import { cn } from "cn"
 
 import { useAdmin } from "@/components/app-shell"
 import { BackToCampaigns } from "@/components/back-link"
+import { BodyEditor } from "@/components/body-editor"
 import { senderLabel } from "@/components/senders"
 import { EmailPreview } from "@/components/email-preview"
 import { Button } from "@/components/ui/button"
@@ -51,10 +52,8 @@ import type { Campaign, Sender } from "../../shared/model"
 
 type Draft = Pick<
   Campaign,
-  "subject" | "body" | "firstBatchSize" | "senderId"
+  "subject" | "format" | "body" | "firstBatchSize" | "senderId"
 >
-
-const MERGE_TAGS = ["{{first_name|there}}", "{{fields.name|fallback}}"]
 
 export function CampaignEditor({
   campaign,
@@ -80,22 +79,9 @@ export function CampaignEditor({
   const { value: draft, update } = campaignSave
   const sender = senders.find(({ id }) => id === draft.senderId) ?? null
   const [tab, setTab] = useState<"write" | "preview">("write")
-  const body = useRef<HTMLTextAreaElement>(null)
-
-  const insertTag = (tag: string) => {
-    const textarea = body.current!
-    textarea.focus()
-    textarea.setRangeText(
-      tag,
-      textarea.selectionStart,
-      textarea.selectionEnd,
-      "end"
-    )
-    update({ body: textarea.value })
-  }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div data-wide className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <BackToCampaigns />
         <div className="flex items-center gap-2">
@@ -127,7 +113,7 @@ export function CampaignEditor({
           autoFocus={!campaign.subject}
           className="field-sizing-content w-full resize-none bg-transparent text-2xl font-semibold tracking-tight text-balance outline-none placeholder:text-muted-foreground/50 sm:text-3xl"
         />
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <div className="flex items-center gap-3 sm:flex-wrap sm:gap-x-6 sm:gap-y-2">
           <SenderField
             senders={senders}
             value={draft.senderId}
@@ -151,40 +137,21 @@ export function CampaignEditor({
         </TabsList>
       </Tabs>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
         <div
           className={cn(
-            "flex flex-col gap-2",
+            "flex min-w-0 flex-col gap-2",
             tab !== "write" && "hidden lg:flex"
           )}
         >
-          <Textarea
-            ref={body}
-            value={draft.body}
-            onChange={(event) => update({ body: event.target.value })}
-            placeholder={"<p>Hi {{first_name|there}},</p>"}
-            aria-label="Message"
-            spellCheck
-            className="h-[max(20rem,calc(100svh-32rem))] resize-none rounded-xl bg-card px-4 py-3.5 font-mono text-[13.5px]/relaxed shadow-xs"
+          <BodyEditor
+            subject={draft.subject}
+            format={draft.format}
+            body={draft.body}
+            onChange={update}
+            className="min-h-96 lg:h-[max(28rem,calc(100svh-19rem))]"
           />
-          <p className="text-xs/relaxed text-muted-foreground">
-            Personalize with{" "}
-            {MERGE_TAGS.map((tag, index) => (
-              <span key={tag}>
-                {index > 0 && " or "}
-                <button
-                  type="button"
-                  onClick={() => insertTag(tag)}
-                  className="rounded bg-muted px-1 py-0.5 font-mono text-foreground transition-colors hover:bg-accent"
-                  title="Insert at cursor"
-                >
-                  {tag}
-                </button>
-              </span>
-            ))}
-            . The text after the bar shows when a contact has no value.
-          </p>
-          <div className="flex flex-col gap-1.5 pt-3">
+          <div className="flex flex-col gap-1.5 pt-4">
             <label htmlFor="footer" className="text-sm font-medium">
               Footer
             </label>
@@ -203,14 +170,16 @@ export function CampaignEditor({
             </p>
           </div>
         </div>
+        {/* Level with the format switch, as tall as the writing area under it. */}
         <EmailPreview
           subject={draft.subject}
-          format={campaign.format}
+          format={draft.format}
           body={draft.body}
           from={sender}
           footer={footerSave.value.footer}
+          grow
           className={cn(
-            "h-[max(26rem,calc(100svh-22rem))]",
+            "max-lg:-mx-4 max-lg:rounded-none max-lg:ring-0 sm:max-lg:-mx-8 lg:sticky lg:top-6 lg:h-[max(30.5rem,calc(100svh-16.5rem))]",
             tab !== "preview" && "hidden lg:flex"
           )}
         />
@@ -284,11 +253,12 @@ function useAutosave<T extends Record<string, unknown>>(
 
 function pickDraft({
   subject,
+  format,
   body,
   firstBatchSize,
   senderId,
 }: Campaign): Draft {
-  return { subject, body, firstBatchSize, senderId }
+  return { subject, format, body, firstBatchSize, senderId }
 }
 
 function sameValues<T extends Record<string, unknown>>(a: T, b: T) {
@@ -360,10 +330,10 @@ function SenderField({
     label: senderLabel(sender),
   }))
   return (
-    <label className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-      From
+    <label className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground max-sm:flex-1">
+      <span className="max-sm:sr-only">From</span>
       <Select items={items} value={value} onValueChange={onChange}>
-        <SelectTrigger size="sm" className="min-w-0 text-foreground">
+        <SelectTrigger size="sm" className="min-w-0 text-foreground max-sm:flex-1">
           <SelectValue placeholder="Choose a sender" />
         </SelectTrigger>
         <SelectContent>
@@ -388,8 +358,9 @@ function FirstBatchField({
   const [text, setText] = useState(String(value))
   const valid = isBatchSize(Number(text))
   return (
-    <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-      First batch
+    <label className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+      <span className="sm:hidden">Batch</span>
+      <span className="max-sm:hidden">First batch</span>
       <Input
         type="number"
         inputMode="numeric"
@@ -404,11 +375,8 @@ function FirstBatchField({
         aria-invalid={!valid || undefined}
         className="h-7 w-20 [appearance:textfield] px-2 text-center tabular-nums [&::-webkit-inner-spin-button]:appearance-none"
       />
-      <span>
-        contacts
-        <span className="hidden sm:inline">
-          , then it pauses for your review
-        </span>
+      <span className="max-sm:hidden">
+        contacts, then it pauses for your review
       </span>
     </label>
   )

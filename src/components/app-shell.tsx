@@ -93,7 +93,8 @@ export default function AppShell() {
             <Logo />
           </Link>
         </header>
-        <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-6 sm:px-8 sm:py-10">
+        {/* A page with a data-wide element, like the campaign editor, gets room for two columns. */}
+        <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-6 has-[[data-wide]]:max-w-[85rem] sm:px-8 sm:py-10">
           <Outlet />
         </div>
       </SidebarInset>
