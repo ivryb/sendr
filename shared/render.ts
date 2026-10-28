@@ -1,9 +1,14 @@
+import { isTag, isText, type ChildNode } from "domhandler"
+import { parseDocument } from "htmlparser2"
 import { Marked } from "marked"
+
+import type { CampaignFormat } from "./model"
 
 /** Renders a campaign for one recipient. Shared by sending and the admin app's live preview. */
 export type RenderInput = {
   subject: string
-  markdown: string
+  format: CampaignFormat
+  body: string
   footer: string
   recipient: { firstName: string | null; fields: Record<string, string> }
   unsubscribeUrl: string
@@ -29,8 +34,9 @@ export function renderEmail(input: RenderInput): RenderedEmail {
       return filled === null ? fallback.trim() : escape(filled)
     })
 
-  const body = merge(toHtml(input.markdown), escapeHtml)
-  const footer = merge(toHtml(input.footer), escapeHtml)
+  const html = input.format === "text" ? `<div style="white-space:pre-wrap;">${escapeHtml(input.body)}</div>` : input.body
+  const body = merge(html, escapeHtml)
+  const footer = merge(markdownToHtml(input.footer), escapeHtml)
   const subject = merge(input.subject, (text) => text)
 
   return {
@@ -41,7 +47,7 @@ export function renderEmail(input: RenderInput): RenderedEmail {
       footer: { html: footer, unsubscribeUrl: input.unsubscribeUrl },
     }),
     text: [
-      merge(input.markdown, (text) => text),
+      merge(input.format === "text" ? input.body : htmlToText(input.body), (text) => text),
       "--",
       merge(input.footer, (text) => text),
       `Unsubscribe: ${input.unsubscribeUrl}`,
@@ -64,11 +70,45 @@ export function renderMessage(input: { subject: string; markdown: string }): Ren
 }
 
 /** Markdown to HTML. marked percent-encodes link URLs, so their merge tags are put back. */
-function toHtml(markdown: string) {
+export function markdownToHtml(markdown: string) {
   return (marked.parse(markdown) as string).replace(
     /%7B%7B(.*?)%7D%7D/gi,
     (_, tag: string) => `{{${escapeHtml(decodeURIComponent(tag))}}}`
   )
+}
+
+// Elements whose content isn't part of the message.
+const HIDDEN = new Set(["head", "title", "style", "script"])
+const BLOCKS = new Set([
+  ..."p h1 h2 h3 h4 h5 h6 div blockquote ul ol table tr pre hr figure".split(" "),
+])
+
+/** The message as plain text: a line per paragraph, heading and list item, links as "text (url)". */
+function htmlToText(html: string) {
+  return textOf(parseDocument(html).children)
+    .split("\n")
+    .map((line) => line.trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
+function textOf(nodes: ChildNode[]): string {
+  return nodes.map(nodeText).join("")
+}
+
+function nodeText(node: ChildNode): string {
+  if (isText(node)) return node.data.replace(/\s+/g, " ")
+  if (!isTag(node) || HIDDEN.has(node.name)) return ""
+  const inner = textOf(node.children).trim()
+  const { href, "data-src": src, "data-title": title } = node.attribs
+  if (node.name === "br") return "\n"
+  if (node.name === "li") return `\n- ${inner}`
+  if (node.name === "a" && href && !href.startsWith("#") && href !== inner) {
+    return inner ? ` ${inner} (${href}) ` : href
+  }
+  if (node.name === "figure" && src) return `\n\n${title ? `${title}: ` : ""}${src}\n\n`
+  return BLOCKS.has(node.name) ? `\n\n${inner}\n\n` : inner
 }
 
 function layout(parts: {

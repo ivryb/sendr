@@ -4,6 +4,7 @@ import { z } from "zod"
 
 import {
   CAMPAIGN_ACTIONS,
+  CAMPAIGN_FORMATS,
   CAMPAIGN_STATUSES,
   DELIVERY_STATUSES,
   type Campaign,
@@ -11,18 +12,32 @@ import {
   type CampaignCounts,
   type CampaignStatus,
 } from "../../shared/model"
+import { markdownToHtml } from "../../shared/render"
 import { db } from "../db/client"
 import { campaigns, deliveries } from "../db/schema"
 import { DomainError } from "../lib/errors"
 import type { InstanceSettings } from "../lib/settings"
 import { checkSender, defaultSender } from "./senders"
 
-export const campaignInput = z.object({
-  senderId: z.string().nullable().optional(),
-  subject: z.string().max(998).optional(),
-  markdown: z.string().optional(),
-  firstBatchSize: z.number().int().min(1).max(100_000).optional(),
-})
+export const campaignInput = z
+  .object({
+    senderId: z.string().nullable().optional(),
+    subject: z.string().max(998).optional(),
+    format: z.enum(CAMPAIGN_FORMATS).optional(),
+    body: z.string().optional(),
+    // Agents write Markdown well, so it's accepted and stored as an editor body.
+    markdown: z.string().optional(),
+    firstBatchSize: z.number().int().min(1).max(100_000).optional(),
+  })
+  .refine((input) => input.markdown === undefined || input.body === undefined, {
+    message: "Send the message as `body` or `markdown`, not both.",
+    path: ["markdown"],
+  })
+  .transform(({ markdown, ...input }) =>
+    markdown === undefined
+      ? input
+      : { ...input, format: "editor" as const, body: markdownToHtml(markdown) }
+  )
 
 /** One queue message sends the campaign's next deliveries, then queues the next message. */
 export type SendMessage = { campaignId: string }
@@ -74,7 +89,7 @@ export async function startCampaign(id: string, settings: InstanceSettings) {
   assertAction(campaign.status, "start")
   const missing = [
     !campaign.subject.trim() && "a subject",
-    !campaign.markdown.trim() && "a message",
+    !campaign.body.trim() && "a message",
     !campaign.senderId && "a sender",
     !settings.publicUrl && "a public URL in Settings",
   ].filter(Boolean)
@@ -228,7 +243,8 @@ function toCampaignDto(row: typeof campaigns.$inferSelect, counts: CampaignCount
   return {
     id: row.id,
     subject: row.subject,
-    markdown: row.markdown,
+    format: row.format,
+    body: row.body,
     status: row.status,
     senderId: row.senderId,
     firstBatchSize: row.firstBatchSize,

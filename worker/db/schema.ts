@@ -11,6 +11,7 @@ import {
 
 import {
   type ApiKeyPermission,
+  CAMPAIGN_FORMATS,
   CAMPAIGN_STATUSES,
   CONTACT_STATUSES,
   DELIVERY_STATUSES,
@@ -78,7 +79,8 @@ export type SenderRow = typeof senders.$inferSelect
 export const campaigns = sqliteTable("campaigns", {
   id: id(),
   subject: text("subject").notNull().default(""),
-  markdown: text("markdown").notNull().default(""),
+  format: text("format", { enum: CAMPAIGN_FORMATS }).notNull().default("editor"),
+  body: text("body").notNull().default(""),
   status: text("status", { enum: CAMPAIGN_STATUSES })
     .notNull()
     .default("draft"),

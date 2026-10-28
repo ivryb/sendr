@@ -51,7 +51,7 @@ import type { Campaign, Sender } from "../../shared/model"
 
 type Draft = Pick<
   Campaign,
-  "subject" | "markdown" | "firstBatchSize" | "senderId"
+  "subject" | "body" | "firstBatchSize" | "senderId"
 >
 
 const MERGE_TAGS = ["{{first_name|there}}", "{{fields.name|fallback}}"]
@@ -91,7 +91,7 @@ export function CampaignEditor({
       textarea.selectionEnd,
       "end"
     )
-    update({ markdown: textarea.value })
+    update({ body: textarea.value })
   }
 
   return (
@@ -160,17 +160,15 @@ export function CampaignEditor({
         >
           <Textarea
             ref={body}
-            value={draft.markdown}
-            onChange={(event) => update({ markdown: event.target.value })}
-            placeholder={
-              "Hi {{first_name|there}},\n\nWrite your update in Markdown."
-            }
+            value={draft.body}
+            onChange={(event) => update({ body: event.target.value })}
+            placeholder={"<p>Hi {{first_name|there}},</p>"}
             aria-label="Message"
             spellCheck
             className="h-[max(20rem,calc(100svh-32rem))] resize-none rounded-xl bg-card px-4 py-3.5 font-mono text-[13.5px]/relaxed shadow-xs"
           />
           <p className="text-xs/relaxed text-muted-foreground">
-            Markdown works. Personalize with{" "}
+            Personalize with{" "}
             {MERGE_TAGS.map((tag, index) => (
               <span key={tag}>
                 {index > 0 && " or "}
@@ -207,7 +205,8 @@ export function CampaignEditor({
         </div>
         <EmailPreview
           subject={draft.subject}
-          markdown={draft.markdown}
+          format={campaign.format}
+          body={draft.body}
           from={sender}
           footer={footerSave.value.footer}
           className={cn(
@@ -285,11 +284,11 @@ function useAutosave<T extends Record<string, unknown>>(
 
 function pickDraft({
   subject,
-  markdown,
+  body,
   firstBatchSize,
   senderId,
 }: Campaign): Draft {
-  return { subject, markdown, firstBatchSize, senderId }
+  return { subject, body, firstBatchSize, senderId }
 }
 
 function sameValues<T extends Record<string, unknown>>(a: T, b: T) {

@@ -238,6 +238,33 @@ describe("sending a campaign", () => {
   })
 })
 
+describe("campaign content", () => {
+  it("Markdown is stored as an editor body", async () => {
+    const created = await newCampaign({ markdown: "Hello **{{first_name|you}}**" })
+    expect(created).toMatchObject({ format: "editor", body: "<p>Hello <strong>{{first_name|you}}</strong></p>\n" })
+    expect(created).not.toHaveProperty("markdown")
+  })
+
+  it("a draft can switch to raw HTML or plain text", async () => {
+    const { id } = await newCampaign({ format: "html", body: "<h1>Hi</h1>", markdown: undefined })
+    expect(await campaign(id)).toMatchObject({ format: "html", body: "<h1>Hi</h1>" })
+    await request(`/api/v1/campaigns/${id}`, {
+      method: "PUT",
+      cookie: admin,
+      json: { format: "text", body: "Hi there" },
+    })
+    expect(await campaign(id)).toMatchObject({ format: "text", body: "Hi there" })
+  })
+
+  it("a campaign without a message can't start", async () => {
+    await addContacts(1)
+    const { id } = await newCampaign({ markdown: undefined, body: " " })
+    const response = await act(id, "start")
+    expect(response.status).toBe(400)
+    expect((await response.json<{ message: string }>()).message).toContain("a message")
+  })
+})
+
 describe("tracking clicks and opens", () => {
   const DOCS = "https://example.com/docs?a=1&b=2"
 

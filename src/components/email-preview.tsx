@@ -4,7 +4,7 @@ import { cn } from "cn"
 
 import { useAdmin } from "@/components/app-shell"
 import { useDebounced } from "@/lib/use-debounced"
-import { senderAddress } from "../../shared/model"
+import { senderAddress, type CampaignFormat } from "../../shared/model"
 import { renderEmail } from "../../shared/render"
 
 /**
@@ -13,31 +13,34 @@ import { renderEmail } from "../../shared/render"
  */
 export function EmailPreview({
   subject,
-  markdown,
+  format,
+  body,
   from,
   footer,
   className,
 }: {
   subject: string
-  markdown: string
+  format: CampaignFormat
+  body: string
   from: { name: string; email: string } | null
   footer: string
   className?: string
 }) {
   const me = useAdmin()
   const debouncedSubject = useDebounced(subject)
-  const debouncedMarkdown = useDebounced(markdown)
+  const debouncedBody = useDebounced(body)
   const debouncedFooter = useDebounced(footer)
   const email = useMemo(
     () =>
       renderEmail({
         subject: debouncedSubject,
-        markdown: debouncedMarkdown,
+        format,
+        body: debouncedBody,
         footer: debouncedFooter,
         recipient: { firstName: me.name.split(" ")[0] || null, fields: {} },
         unsubscribeUrl: "#",
       }),
-    [debouncedSubject, debouncedMarkdown, debouncedFooter, me.name]
+    [debouncedSubject, format, debouncedBody, debouncedFooter, me.name]
   )
   const fromAddress = from && senderAddress(from)
   // A new srcDoc reloads the frame at the top; keep the reader where they were.

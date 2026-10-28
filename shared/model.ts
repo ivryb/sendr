@@ -44,6 +44,13 @@ export type Email = {
   createdAt: string
 }
 
+/**
+ * How a campaign's body is written. "editor": the editor's HTML subset, which Sendr lays out
+ * for email clients. "html": the sender's own HTML, sent as written. "text": plain text only.
+ */
+export const CAMPAIGN_FORMATS = ["editor", "html", "text"] as const
+export type CampaignFormat = (typeof CAMPAIGN_FORMATS)[number]
+
 export type CampaignAction = "start" | "approve" | "cancel"
 
 /** Actions the operator can take from each campaign status. */
@@ -68,7 +75,8 @@ export type CampaignLink = { url: string; clicks: number }
 export type Campaign = {
   id: string
   subject: string
-  markdown: string
+  format: CampaignFormat
+  body: string
   status: CampaignStatus
   senderId: string | null
   firstBatchSize: number

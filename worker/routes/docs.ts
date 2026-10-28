@@ -74,8 +74,20 @@ curl -X POST ${api}/emails \\
 
 ## Campaigns (full permission)
 
-A campaign is Markdown sent to every subscribed contact; raw HTML inside it is kept as is. Merge tags fill in contact data with a
-fallback: \`{{first_name|there}}\`, \`{{fields.plan|free}}\`. Starting a campaign sends it to the
+A campaign is a message sent to every subscribed contact. Its \`body\` is written in one of three
+\`format\`s:
+
+- \`editor\` (default): a small HTML subset that Sendr lays out for email clients, light and dark:
+  \`h1\`-\`h3\`, \`p\`, \`strong\`, \`em\`, \`u\`, \`s\`, \`a href\`, \`ul\`/\`ol\`/\`li\`, \`blockquote\`, \`hr\`, \`br\`,
+  \`img src alt width\`. \`<a data-button href="...">Label</a>\` is a button. A video or audio card:
+  \`<figure data-media="video" data-src="URL" data-poster="URL" data-title="Title" data-duration="2:14"></figure>\`
+  (\`data-media="audio"\` has no poster; \`data-poster\` and \`data-duration\` are optional).
+- \`html\`: your own HTML, a full document or a fragment, sent as written with the footer added.
+- \`text\`: plain text, sent without an HTML part.
+
+Instead of \`format\` and \`body\`, you can send \`markdown\`: Sendr converts it to an \`editor\` body. Merge
+tags fill in contact data with a fallback, in any format and inside link URLs:
+\`{{first_name|there}}\`, \`{{fields.plan|free}}\`. Starting a campaign sends it to the
 first batch (\`firstBatchSize\`, 200 by default), then pauses at \`awaiting_approval\` so a human
 can check bounces and complaints. Approve only if fewer than about 5% bounced and 0.1% complained.
 
@@ -83,8 +95,8 @@ Statuses: draft, first_batch, awaiting_approval, sending, sent, cancelled.
 
 - \`GET /campaigns\`, \`GET /campaigns/{id}\` (with delivery \`counts\`). \`GET /campaigns/{id}\`
   also returns \`links\`: \`[{ "url", "clicks" }]\`, most clicked first.
-- \`POST /campaigns\` with \`{ "subject"?, "markdown"?, "senderId"?, "firstBatchSize"? }\` creates a
-  draft. Without \`senderId\` it uses the first verified sender, or the first sender while none is.
+- \`POST /campaigns\` with \`{ "subject"?, "format"?, "body"?, "senderId"?, "firstBatchSize"? }\` (or
+  \`markdown\` instead of \`format\` and \`body\`) creates a draft. Without \`senderId\` it uses the first verified sender, or the first sender while none is.
 - \`PUT /campaigns/{id}\` edits a draft. \`DELETE /campaigns/{id}\` deletes a draft.
 - \`POST /campaigns/{id}/test\` with \`{ "to": "you@example.com" }\` sends one test copy. \`to\` is
   required with an API key.

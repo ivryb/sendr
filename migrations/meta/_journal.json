@@ -43,6 +43,13 @@
       "when": 1792645344509,
       "tag": "0005_click_and_open_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793178310200,
+      "tag": "0006_campaign_formats",
+      "breakpoints": true
     }
   ]
 }

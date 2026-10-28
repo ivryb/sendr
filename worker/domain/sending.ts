@@ -55,7 +55,8 @@ export async function processSendMessage({ campaignId }: SendMessage) {
     const url = await unsubscribeUrl(settings, contact.id)
     const email = renderEmail({
       subject: campaign.subject,
-      markdown: campaign.markdown,
+      format: campaign.format,
+      body: campaign.body,
       footer: settings.footer,
       recipient: contact,
       unsubscribeUrl: url,
@@ -105,7 +106,8 @@ export async function sendTestEmail(
   const url = `${settings.publicUrl}/u/test`
   const email = renderEmail({
     subject: `[Test] ${campaign.subject}`,
-    markdown: campaign.markdown,
+    format: campaign.format,
+    body: campaign.body,
     footer: settings.footer,
     recipient: { firstName: to.name.split(" ")[0] || null, fields: {} },
     unsubscribeUrl: url,

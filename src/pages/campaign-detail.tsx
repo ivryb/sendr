@@ -170,7 +170,8 @@ export function CampaignDetail({
         <h2 className="font-medium">Message</h2>
         <EmailPreview
           subject={campaign.subject}
-          markdown={campaign.markdown}
+          format={campaign.format}
+          body={campaign.body}
           from={sender}
           footer={footer}
           className="h-[36rem]"
