@@ -158,8 +158,12 @@ ${html}
 </div>`
 }
 
-/** The footer goes before </body>; a fragment gets a minimal document around it. */
-function insertFooter(html: string, footer: string) {
+/**
+ * The footer goes before </body>, in a centered column like the campaign layout's, so it lines
+ * up with a typical email. A fragment gets a minimal document around it.
+ */
+function insertFooter(html: string, block: string) {
+  const footer = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" style="padding:0 0 32px;"><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;"><tr><td style="padding:0 24px;text-align:left;">${block}</td></tr></table></td></tr></table>`
   const end = html.search(/<\/body\s*>/i)
   if (end !== -1) return `${html.slice(0, end)}${footer}\n${html.slice(end)}`
   return `<!doctype html>
@@ -293,7 +297,7 @@ function videoCard(media: MediaAttributes, src: string) {
   const backdrop = poster
     ? `background-image:url("${poster}");background-size:cover;background-position:center;`
     : ""
-  const badge = `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td width="64" height="64" align="center" valign="middle" bgcolor="#ffffff" style="width:64px;height:64px;border-radius:32px;background-color:#ffffff;color:${LIGHT.text};font-size:22px;line-height:64px;text-indent:4px;">${PLAY}</td></tr></table>`
+  const badge = `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td aria-hidden="true" width="64" height="64" align="center" valign="middle" bgcolor="#ffffff" style="width:64px;height:64px;border-radius:32px;background-color:#ffffff;color:${LIGHT.text};font-size:22px;line-height:64px;text-indent:4px;">${PLAY}</td></tr></table>`
   const frame = tag(
     "td",
     {
@@ -318,7 +322,7 @@ function videoCard(media: MediaAttributes, src: string) {
 
 /** A compact row: play circle, title, duration; the whole card links to the audio. */
 function audioCard(media: MediaAttributes, src: string) {
-  const circle = `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td class="sendr-button" width="40" height="40" align="center" valign="middle" bgcolor="${LIGHT.text}" style="width:40px;height:40px;border-radius:20px;background-color:${LIGHT.text};color:${LIGHT.bg};font-size:14px;line-height:40px;text-indent:2px;">${PLAY}</td></tr></table>`
+  const circle = `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td aria-hidden="true" class="sendr-button" width="40" height="40" align="center" valign="middle" bgcolor="${LIGHT.text}" style="width:40px;height:40px;border-radius:20px;background-color:${LIGHT.text};color:${LIGHT.bg};font-size:14px;line-height:40px;text-indent:2px;">${PLAY}</td></tr></table>`
   return tag(
     "a",
     { href: src, style: "display:block;margin:0 0 16px;text-decoration:none;" },
@@ -376,12 +380,17 @@ function textOf(nodes: ChildNode[]): string {
 
 function nodeText(node: ChildNode): string {
   if (isText(node)) return node.data.replace(/\s+/g, " ")
-  if (!isTag(node) || HIDDEN.has(node.name)) return ""
+  // Decorations, like a card's play badge, aren't part of the message.
+  if (!isTag(node) || HIDDEN.has(node.name) || node.attribs["aria-hidden"] === "true") return ""
   const inner = textOf(node.children).trim()
   const { href, "data-src": src, "data-title": title } = node.attribs
   if (node.name === "br") return "\n"
   if (node.name === "li") return `\n- ${inner}`
   if (node.name === "a" && href && !href.startsWith("#") && href !== inner) {
+    // A link around blocks, like a rendered media card, is a block of its own.
+    if (node.children.some((child) => isTag(child) && BLOCKS.has(child.name))) {
+      return `\n\n${inner ? `${inner} (${href})` : href}\n\n`
+    }
     return inner ? ` ${inner} (${href}) ` : href
   }
   if (node.name === "figure" && src) return `\n\n${title ? `${title}: ` : ""}${src}\n\n`

@@ -41,6 +41,18 @@ describe("switching formats", () => {
     )
     expect(bodyToText("text", "Hi {{first_name}}")).toBe("Hi {{first_name}}")
   })
+
+  it("turns the HTML document into plain text with each media card on its own line", () => {
+    const audio = '<figure data-media="audio" data-src="https://example.com/a.mp3"></figure>'
+    expect(bodyToText("html", editorBodyToHtml("October", `${body}${audio}`))).toBe(
+      [
+        "Hi {{first_name|there}},",
+        "Read the changelog (https://example.com/?ref={{first_name|x}}) .",
+        "Walkthrough · 2:14 (https://example.com/v.mp4)",
+        "Listen (https://example.com/a.mp3)",
+      ].join("\n\n")
+    )
+  })
 })
 
 it("keeps a blank line from the editor in the email", () => {
