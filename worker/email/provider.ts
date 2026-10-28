@@ -5,7 +5,8 @@ export type OutgoingEmail = {
   to: string
   replyTo?: string
   subject: string
-  html: string
+  /** Null sends a text-only email. */
+  html: string | null
   text: string
   headers?: Record<string, string>
 }

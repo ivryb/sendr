@@ -256,6 +256,69 @@ describe("campaign content", () => {
     expect(await campaign(id)).toMatchObject({ format: "text", body: "Hi there" })
   })
 
+  async function testSend(body: Record<string, unknown>) {
+    const { id } = await newCampaign({ markdown: undefined, ...body })
+    await request(`/api/v1/campaigns/${id}/test`, { cookie: admin, json: {} })
+    return sentEmails().at(-1)!
+  }
+
+  it("an editor campaign renders its button as a link to the URL", async () => {
+    const { html, text } = await testSend({
+      body: '<p>Hi</p><a data-button href="https://acme.com/try">Try it now</a>',
+    })
+    expect(html).toMatch(/<a [^>]*href="https:\/\/acme\.com\/try"[^>]*>Try it now<\/a>/)
+    expect(text).toContain("Try it now (https://acme.com/try)")
+  })
+
+  it("a merge tag inside a link is filled for the recipient", async () => {
+    await addContacts(1)
+    const { id } = await newCampaign({
+      markdown: undefined,
+      body: '<p><a href="https://acme.com/hi?name={{first_name|friend}}">Say hi</a></p>',
+    })
+    await act(id, "start")
+    await reachStatus(id, "sent")
+    const [click] = sentEmails()[0].html!.match(/\/c\/[^"]+/)!
+    const redirect = await request(click, { redirect: "manual" })
+    expect(redirect.headers.get("location")).toBe("https://acme.com/hi?name=Ann")
+  })
+
+  it("a video card links to the video", async () => {
+    const { html, text } = await testSend({
+      body: '<figure data-media="video" data-src="https://cdn.acme.com/demo.mp4" data-poster="https://cdn.acme.com/poster.jpg" data-title="Demo" data-duration="2:14"></figure>',
+    })
+    expect(html).toMatch(/<a [^>]*href="https:\/\/cdn\.acme\.com\/demo\.mp4"[^>]*>.*poster\.jpg.*Demo.*2:14.*<\/a>/s)
+    expect(text).toContain("Demo: https://cdn.acme.com/demo.mp4")
+  })
+
+  it("a raw HTML campaign keeps its markup and gets the unsubscribe link", async () => {
+    const { html, text } = await testSend({
+      format: "html",
+      body: '<html><body><div class="hero">Hi {{first_name|there}}</div></body></html>',
+    })
+    expect(html).toMatch(/^<html><body><div class="hero">Hi there<\/div>/)
+    expect(html).toMatch(/>Unsubscribe<\/a>.*<\/body><\/html>$/s)
+    expect(text).toMatch(/^Hi there\n/)
+  })
+
+  it("a text campaign sends no HTML part, and its links still count clicks", async () => {
+    await addContacts(1)
+    const { id } = await newCampaign({
+      markdown: undefined,
+      format: "text",
+      body: "Hi {{first_name|there}}, the news is at https://acme.com/news.",
+    })
+    await act(id, "start")
+    await reachStatus(id, "sent")
+
+    const { html, text } = sentEmails()[0]
+    expect(html).toBeNull()
+    expect(text).toMatch(/^Hi Ann, the news is at https:\/\/sendr\.test\/c\/\S+\.$/m)
+    expect(text).toMatch(/Unsubscribe: https:\/\/sendr\.test\/u\//)
+    const click = await request(text.match(/\/c\/[^\s.]+\.[^\s.]+\.[^\s.]+/)![0], { redirect: "manual" })
+    expect(click.headers.get("location")).toBe("https://acme.com/news")
+  })
+
   it("a campaign without a message can't start", async () => {
     await addContacts(1)
     const { id } = await newCampaign({ markdown: undefined, body: " " })
@@ -283,7 +346,10 @@ describe("tracking clicks and opens", () => {
     return id
   }
 
-  const emailTo = (to: string) => sentEmails().find((email) => email.to === to)!
+  const emailTo = (to: string) => {
+    const email = sentEmails().find((email) => email.to === to)!
+    return { ...email, html: email.html! }
+  }
   const clickLinks = (html: string) =>
     Array.from(html.matchAll(/href="https:\/\/sendr\.test(\/c\/[^"]+)"/g), (match) => match[1])
   const openPixel = (html: string) => html.match(/src="https:\/\/sendr\.test(\/o\/[^"]+)"/)![1]

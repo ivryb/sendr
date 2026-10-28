@@ -61,7 +61,7 @@ export async function processSendMessage({ campaignId }: SendMessage) {
       recipient: contact,
       unsubscribeUrl: url,
     })
-    const html = await trackEmail(email.html, {
+    const tracked = await trackEmail(email, {
       settings,
       deliveryId: delivery.id,
       unsubscribeUrl: url,
@@ -71,8 +71,7 @@ export async function processSendMessage({ campaignId }: SendMessage) {
         from: senderAddress(sender),
         replyTo: sender.replyTo || undefined,
         to: contact.email,
-        ...email,
-        html,
+        ...tracked,
         headers: unsubscribeHeaders(url),
       })
       // A crash between the send and this write resends one email on retry. That rare

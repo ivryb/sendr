@@ -44,7 +44,7 @@ export function sesProvider(options: SesOptions): EmailProvider {
             Simple: {
               Subject: { Data: email.subject, Charset: "UTF-8" },
               Body: {
-                Html: { Data: email.html, Charset: "UTF-8" },
+                Html: email.html === null ? undefined : { Data: email.html, Charset: "UTF-8" },
                 // An HTML-only email has no text part; SES rejects an empty one.
                 Text: email.text ? { Data: email.text, Charset: "UTF-8" } : undefined,
               },

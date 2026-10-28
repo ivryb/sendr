@@ -1,10 +1,13 @@
-import { isTag, isText, type ChildNode } from "domhandler"
+import { isTag, isText, type ChildNode, type Element } from "domhandler"
 import { parseDocument } from "htmlparser2"
 import { Marked } from "marked"
 
 import type { CampaignFormat } from "./model"
 
-/** Renders a campaign for one recipient. Shared by sending and the admin app's live preview. */
+/**
+ * Renders a campaign for one recipient. Shared by sending and the admin app's live preview, so
+ * it runs in both the Worker and the browser.
+ */
 export type RenderInput = {
   subject: string
   format: CampaignFormat
@@ -14,12 +17,35 @@ export type RenderInput = {
   unsubscribeUrl: string
 }
 
-export type RenderedEmail = { subject: string; html: string; text: string }
+/** `html` is null for a text campaign, which is sent without an HTML part. */
+export type RenderedEmail = { subject: string; html: string | null; text: string }
+
+/** The footer from settings (Markdown) with the recipient's unsubscribe link. */
+type Footer = { markdown: string; unsubscribeUrl: string }
 
 const marked = new Marked({ gfm: true, breaks: true, async: false })
 
 // {{first_name}}, {{first_name|there}}, {{fields.plan|free}}
 const MERGE_TAG = /\{\{\s*([\w.]+)\s*(?:\|([^}]*))?\}\}/g
+
+/** Each format's email with merge tags still in it. */
+const FORMATS: Record<
+  CampaignFormat,
+  (body: string, subject: string, footer: Footer) => Omit<RenderedEmail, "subject">
+> = {
+  editor: (body, subject, footer) => {
+    const nodes = parseDocument(body).children
+    return {
+      html: layout(subject, renderNodes(nodes), footerBlock(footer)),
+      text: withFooterText(htmlToText(nodes), footer),
+    }
+  },
+  html: (body, _, footer) => ({
+    html: insertFooter(body, footerBlock(footer)),
+    text: withFooterText(htmlToText(parseDocument(body).children), footer),
+  }),
+  text: (body, _, footer) => ({ html: null, text: withFooterText(body, footer) }),
+}
 
 export function renderEmail(input: RenderInput): RenderedEmail {
   const value = (tag: string) => {
@@ -33,27 +59,14 @@ export function renderEmail(input: RenderInput): RenderedEmail {
       const filled = value(tag)
       return filled === null ? fallback.trim() : escape(filled)
     })
+  const plain = (text: string) => text
 
-  const html = input.format === "text" ? `<div style="white-space:pre-wrap;">${escapeHtml(input.body)}</div>` : input.body
-  const body = merge(html, escapeHtml)
-  const footer = merge(markdownToHtml(input.footer), escapeHtml)
-  const subject = merge(input.subject, (text) => text)
-
+  const footer = { markdown: input.footer, unsubscribeUrl: input.unsubscribeUrl }
+  const email = FORMATS[input.format](input.body, input.subject, footer)
   return {
-    subject,
-    html: layout({
-      subject,
-      body,
-      footer: { html: footer, unsubscribeUrl: input.unsubscribeUrl },
-    }),
-    text: [
-      merge(input.format === "text" ? input.body : htmlToText(input.body), (text) => text),
-      "--",
-      merge(input.footer, (text) => text),
-      `Unsubscribe: ${input.unsubscribeUrl}`,
-    ]
-      .filter((part) => part.trim())
-      .join("\n\n"),
+    subject: merge(input.subject, plain),
+    html: email.html && merge(email.html, escapeHtml),
+    text: merge(email.text, plain),
   }
 }
 
@@ -61,12 +74,9 @@ export function renderEmail(input: RenderInput): RenderedEmail {
  * A single email, like a receipt or a welcome note: Markdown in the same layout as campaigns,
  * without the campaign footer or unsubscribe link.
  */
-export function renderMessage(input: { subject: string; markdown: string }): RenderedEmail {
-  return {
-    subject: input.subject,
-    html: layout({ subject: input.subject, body: marked.parse(input.markdown) as string }),
-    text: input.markdown,
-  }
+export function renderMessage(input: { subject: string; markdown: string }) {
+  const nodes = parseDocument(marked.parse(input.markdown) as string).children
+  return { subject: input.subject, html: layout(input.subject, renderNodes(nodes)), text: input.markdown }
 }
 
 /** Markdown to HTML. marked percent-encodes link URLs, so their merge tags are put back. */
@@ -77,6 +87,270 @@ export function markdownToHtml(markdown: string) {
   )
 }
 
+// Light colors are inline; dark ones override them through the sendr-* classes below.
+const LIGHT = { bg: "#ffffff", text: "#1c1917", muted: "#78716c", link: "#2563eb", border: "#e7e5e4" }
+const DARK = { bg: "#1c1917", text: "#f5f5f4", muted: "#a8a29e", link: "#60a5fa", border: "#44403c" }
+
+const DARK_STYLES: [string, Record<string, string>][] = [
+  ["bg", { "background-color": DARK.bg }],
+  ["text", { color: DARK.text }],
+  ["muted", { color: DARK.muted }],
+  ["link", { color: DARK.link }],
+  ["border", { "border-color": DARK.border }],
+  ["button", { "background-color": DARK.text, "border-color": DARK.text, color: DARK.bg }],
+]
+
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+// The 600px column less its side padding; Outlook ignores max-width, so wider images are capped.
+const CONTENT_WIDTH = 552
+
+/** Outlook.com marks the elements it darkens with data-ogsc (text) and data-ogsb (backgrounds). */
+function darkCss(prefix = "") {
+  return DARK_STYLES.map(([name, declarations]) => {
+    const body = Object.entries(declarations).map(([property, color]) => `${property}: ${color} !important;`)
+    return `${prefix}.sendr-${name} { ${body.join(" ")} }`
+  }).join("\n")
+}
+
+function layout(subject: string, body: string, footer = "") {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>${escapeHtml(subject)}</title>
+<style>
+:root { color-scheme: light dark; supported-color-schemes: light dark; }
+@media (prefers-color-scheme: dark) {
+${darkCss()}
+}
+${darkCss("[data-ogsc] ")}
+${darkCss("[data-ogsb] ")}
+</style>
+</head>
+<body class="sendr-bg" style="margin:0;padding:0;background-color:${LIGHT.bg};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="sendr-bg" bgcolor="${LIGHT.bg}" style="background-color:${LIGHT.bg};">
+<tr><td align="center" style="padding:32px 0;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">
+<tr><td class="sendr-text" style="padding:0 24px;font-family:${FONT};font-size:16px;line-height:1.6;color:${LIGHT.text};text-align:left;">
+${body}
+${footer}
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`
+}
+
+function footerBlock({ markdown, unsubscribeUrl }: Footer) {
+  // marked's own markup, so these plain tags are the ones it wrote.
+  const html = markdownToHtml(markdown)
+    .replaceAll("<p>", '<p style="margin:0 0 8px;">')
+    .replaceAll('<a href="', `<a class="sendr-muted" style="color:${LIGHT.muted};" href="`)
+  return `<div class="sendr-muted sendr-border" style="margin-top:40px;padding-top:20px;border-top:1px solid ${LIGHT.border};font-family:${FONT};font-size:13px;line-height:1.5;color:${LIGHT.muted};">
+${html}
+<p style="margin:0;"><a href="${escapeHtml(unsubscribeUrl)}" class="sendr-muted" style="color:${LIGHT.muted};text-decoration:underline;">Unsubscribe</a></p>
+</div>`
+}
+
+/** The footer goes before </body>; a fragment gets a minimal document around it. */
+function insertFooter(html: string, footer: string) {
+  const end = html.search(/<\/body\s*>/i)
+  if (end !== -1) return `${html.slice(0, end)}${footer}\n${html.slice(end)}`
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+${html}
+${footer}
+</body>
+</html>`
+}
+
+function withFooterText(body: string, { markdown, unsubscribeUrl }: Footer) {
+  return [body, "--", markdown, `Unsubscribe: ${unsubscribeUrl}`]
+    .filter((part) => part.trim())
+    .join("\n\n")
+}
+
+// The editor's HTML subset, styled inline for email clients. Other tags pass through as written.
+const ELEMENTS: Record<string, (node: Element) => string> = {
+  h1: heading(28),
+  h2: heading(22),
+  h3: heading(18),
+  p: (node) => {
+    const [only, ...rest] = node.children.filter((child) => !isBlank(child))
+    if (!rest.length && only && isTag(only) && isButton(only)) return button(only)
+    return tag("p", { style: "margin:0 0 16px;" }, renderNodes(node.children))
+  },
+  a: (node) =>
+    isButton(node)
+      ? button(node)
+      : tag(
+          "a",
+          { href: node.attribs.href, class: "sendr-link", style: `color:${LIGHT.link};text-decoration:underline;` },
+          renderNodes(node.children)
+        ),
+  ul: list,
+  ol: list,
+  li: (node) => tag("li", { style: "margin:0 0 6px;" }, renderNodes(node.children)),
+  blockquote: (node) =>
+    tag(
+      "blockquote",
+      {
+        class: "sendr-muted sendr-border",
+        style: `margin:0 0 16px;padding:2px 0 2px 16px;border-left:3px solid ${LIGHT.border};color:${LIGHT.muted};`,
+      },
+      renderNodes(node.children)
+    ),
+  img: ({ attribs: { src, alt, width } }) =>
+    tag("img", {
+      src,
+      alt: alt ?? "",
+      width: width ? String(Math.min(Number.parseInt(width) || CONTENT_WIDTH, CONTENT_WIDTH)) : undefined,
+      style: "display:block;max-width:100%;height:auto;border:0;border-radius:8px;margin:0 0 16px;",
+    }),
+  hr: () =>
+    tag("hr", {
+      class: "sendr-border",
+      style: `height:0;margin:28px 0;border:0;border-top:1px solid ${LIGHT.border};`,
+    }),
+  figure: (node) => {
+    const { "data-media": kind, "data-src": src } = node.attribs
+    const card = kind === "video" ? videoCard : kind === "audio" ? audioCard : null
+    return card && src ? card(node.attribs, src) : passThrough(node)
+  },
+}
+
+const VOID_ELEMENTS = new Set(["area", "br", "col", "embed", "hr", "img", "input", "source", "track", "wbr"])
+
+function renderNodes(nodes: ChildNode[]): string {
+  return nodes.map(renderNode).join("")
+}
+
+function renderNode(node: ChildNode): string {
+  if (isText(node)) return escapeHtml(node.data)
+  if (!isTag(node)) return ""
+  return (ELEMENTS[node.name] ?? passThrough)(node)
+}
+
+function passThrough(node: Element) {
+  return tag(node.name, node.attribs, VOID_ELEMENTS.has(node.name) ? undefined : renderNodes(node.children))
+}
+
+/** An element with escaped attributes; undefined ones are left out, and void elements have no `inner`. */
+function tag(name: string, attributes: Record<string, string | undefined>, inner?: string) {
+  const attrs = Object.entries(attributes)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => ` ${key}="${escapeHtml(value!)}"`)
+    .join("")
+  return inner === undefined ? `<${name}${attrs}>` : `<${name}${attrs}>${inner}</${name}>`
+}
+
+function heading(size: number) {
+  return (node: Element) => {
+    // The first block sits at the top of the email, without the gap that separates sections.
+    const top = isFirst(node) ? 0 : 28
+    const style = `margin:${top}px 0 12px;font-size:${size}px;line-height:1.3;font-weight:700;`
+    return tag(node.name, { style }, renderNodes(node.children))
+  }
+}
+
+function list(node: Element) {
+  return tag(node.name, { style: "margin:0 0 16px;padding:0 0 0 24px;" }, renderNodes(node.children))
+}
+
+/** A table "bulletproof" button: the whole padded cell is the link, in every client. */
+function button(node: Element) {
+  const fill = `background-color:${LIGHT.text};border:1px solid ${LIGHT.text};border-radius:8px;`
+  const link = tag(
+    "a",
+    {
+      href: node.attribs.href,
+      class: "sendr-button",
+      style: `display:inline-block;padding:12px 24px;${fill}color:${LIGHT.bg};font-size:16px;font-weight:600;line-height:1.25;text-decoration:none;`,
+    },
+    renderNodes(node.children)
+  )
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;"><tr><td class="sendr-button" bgcolor="${LIGHT.text}" style="${fill}">${link}</td></tr></table>`
+}
+
+type MediaAttributes = Record<string, string | undefined>
+
+/** A poster (or a dark 16:9 block) with a play badge, then the title; the whole card links to the video. */
+function videoCard(media: MediaAttributes, src: string) {
+  const poster = media["data-poster"]
+  const height = Math.round((CONTENT_WIDTH * 9) / 16)
+  const backdrop = poster
+    ? `background-image:url("${poster}");background-size:cover;background-position:center;`
+    : ""
+  const badge = `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td width="64" height="64" align="center" valign="middle" bgcolor="#ffffff" style="width:64px;height:64px;border-radius:32px;background-color:#ffffff;color:${LIGHT.text};font-size:22px;line-height:64px;text-indent:4px;">${PLAY}</td></tr></table>`
+  const frame = tag(
+    "td",
+    {
+      height: String(height),
+      align: "center",
+      valign: "middle",
+      bgcolor: DARK.bg,
+      background: poster,
+      style: `height:${height}px;border-radius:12px;background-color:${DARK.bg};${backdrop}`,
+    },
+    badge
+  )
+  const caption = mediaCaption(media, "")
+  return tag(
+    "a",
+    { href: src, style: "display:block;margin:0 0 16px;text-decoration:none;" },
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;"><tr>${frame}</tr></table>${
+      caption && `<p class="sendr-text" style="margin:10px 0 0;color:${LIGHT.text};line-height:1.4;">${caption}</p>`
+    }`
+  )
+}
+
+/** A compact row: play circle, title, duration; the whole card links to the audio. */
+function audioCard(media: MediaAttributes, src: string) {
+  const circle = `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td class="sendr-button" width="40" height="40" align="center" valign="middle" bgcolor="${LIGHT.text}" style="width:40px;height:40px;border-radius:20px;background-color:${LIGHT.text};color:${LIGHT.bg};font-size:14px;line-height:40px;text-indent:2px;">${PLAY}</td></tr></table>`
+  return tag(
+    "a",
+    { href: src, style: "display:block;margin:0 0 16px;text-decoration:none;" },
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="sendr-border" style="border:1px solid ${LIGHT.border};border-radius:12px;border-collapse:separate;"><tr><td width="52" style="width:40px;padding:12px 0 12px 12px;">${circle}</td><td class="sendr-text" style="padding:12px 16px 12px 12px;color:${LIGHT.text};line-height:1.4;">${mediaCaption(media, "Listen")}</td></tr></table>`
+  )
+}
+
+// U+FE0E keeps iOS from drawing the triangle as an emoji.
+const PLAY = "&#9654;&#65038;"
+
+function mediaCaption(media: MediaAttributes, fallbackTitle: string) {
+  const title = media["data-title"] || fallbackTitle
+  const duration = media["data-duration"]
+  return [
+    title && `<strong style="font-weight:600;">${escapeHtml(title)}</strong>`,
+    duration && `<span class="sendr-muted" style="color:${LIGHT.muted};">${escapeHtml(duration)}</span>`,
+  ]
+    .filter(Boolean)
+    .join(" &middot; ")
+}
+
+function isButton(node: Element) {
+  return node.name === "a" && "data-button" in node.attribs
+}
+
+function isBlank(node: ChildNode) {
+  return isText(node) && !node.data.trim()
+}
+
+function isFirst(node: Element) {
+  let previous = node.prev
+  while (previous && isBlank(previous)) previous = previous.prev
+  return !previous && (!node.parent || node.parent.type === "root")
+}
+
 // Elements whose content isn't part of the message.
 const HIDDEN = new Set(["head", "title", "style", "script"])
 const BLOCKS = new Set([
@@ -84,10 +358,10 @@ const BLOCKS = new Set([
 ])
 
 /** The message as plain text: a line per paragraph, heading and list item, links as "text (url)". */
-function htmlToText(html: string) {
-  return textOf(parseDocument(html).children)
+function htmlToText(nodes: ChildNode[]) {
+  return textOf(nodes)
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => line.replace(/ {2,}/g, " ").trim())
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim()
@@ -109,44 +383,6 @@ function nodeText(node: ChildNode): string {
   }
   if (node.name === "figure" && src) return `\n\n${title ? `${title}: ` : ""}${src}\n\n`
   return BLOCKS.has(node.name) ? `\n\n${inner}\n\n` : inner
-}
-
-function layout(parts: {
-  subject: string
-  body: string
-  footer?: { html: string; unsubscribeUrl: string }
-}) {
-  const footer =
-    parts.footer &&
-    `<div class="sendr-footer" style="margin-top:40px;padding-top:20px;border-top:1px solid #e7e5e4;font-size:13px;line-height:1.5;color:#78716c;">
-${parts.footer.html}
-<p><a href="${escapeHtml(parts.footer.unsubscribeUrl)}" style="color:#78716c;">Unsubscribe</a></p>
-</div>`
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
-<title>${escapeHtml(parts.subject)}</title>
-<style>
-  .sendr-body p, .sendr-body ul, .sendr-body ol, .sendr-body blockquote { margin: 0 0 16px; }
-  .sendr-body h1, .sendr-body h2, .sendr-body h3 { line-height: 1.3; margin: 28px 0 12px; }
-  .sendr-body a { color: #2563eb; }
-  .sendr-body img { max-width: 100%; height: auto; border-radius: 8px; }
-  .sendr-body blockquote { border-left: 3px solid #d6d3d1; padding-left: 14px; color: #57534e; }
-  .sendr-body code { font-family: ui-monospace, Menlo, monospace; font-size: 14px; background: #f5f5f4; padding: 1px 4px; border-radius: 4px; }
-  .sendr-footer p { margin: 0 0 8px; }
-  .sendr-footer a { color: #78716c; }
-</style>
-</head>
-<body style="margin:0;padding:0;background:#ffffff;">
-<div style="max-width:600px;margin:0 auto;padding:32px 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1c1917;">
-<div class="sendr-body">${parts.body}</div>
-${footer ?? ""}
-</div>
-</body>
-</html>`
 }
 
 function escapeHtml(text: string) {

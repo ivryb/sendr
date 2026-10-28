@@ -70,21 +70,27 @@ export function EmailPreview({
           )}
         </dd>
       </dl>
-      <iframe
-        title="Email preview"
-        ref={frame}
-        sandbox="allow-same-origin"
-        srcDoc={email.html}
-        onLoad={() => {
-          const view = frame.current?.contentWindow
-          if (!view) return
-          view.scrollTo(0, scrollY.current)
-          view.addEventListener("scroll", () => {
-            scrollY.current = view.scrollY
-          })
-        }}
-        className="min-h-0 w-full flex-1 bg-white"
-      />
+      {email.html === null ? (
+        <pre className="min-h-0 flex-1 overflow-auto px-6 py-5 font-sans text-[15px]/relaxed whitespace-pre-wrap text-stone-900">
+          {email.text}
+        </pre>
+      ) : (
+        <iframe
+          title="Email preview"
+          ref={frame}
+          sandbox="allow-same-origin"
+          srcDoc={email.html}
+          onLoad={() => {
+            const view = frame.current?.contentWindow
+            if (!view) return
+            view.scrollTo(0, scrollY.current)
+            view.addEventListener("scroll", () => {
+              scrollY.current = view.scrollY
+            })
+          }}
+          className="min-h-0 w-full flex-1 bg-white"
+        />
+      )}
     </div>
   )
 }

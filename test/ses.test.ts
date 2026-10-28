@@ -74,6 +74,13 @@ describe("SES provider", () => {
     })
   })
 
+  it("sends a text-only email without an HTML part", async () => {
+    const { provider, requests } = providerReplying(Response.json({ MessageId: "ses-2" }))
+    await provider.send({ ...email, html: null })
+    const body = await requests[0].json<{ Content: { Simple: { Body: object } } }>()
+    expect(body.Content.Simple.Body).toEqual({ Text: { Data: "Hi", Charset: "UTF-8" } })
+  })
+
   it("a rejected message fails permanently", async () => {
     const { provider } = providerReplying(
       new Response('{"message":"Email address is not verified."}', {

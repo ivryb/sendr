@@ -10,41 +10,57 @@ import { getSettings, type InstanceSettings } from "../lib/settings"
 const CLICK_PURPOSE = "click"
 const OPEN_PURPOSE = "open"
 
-// An http(s) link's href in rendered HTML: `<a href="...">`, from Markdown or raw HTML.
+// An http(s) link's href in rendered HTML: `<a href="...">`, from the editor or raw HTML.
 const LINK = /(<a\s(?:[^>]*?\s)?href=)(["'])(https?:\/\/[^"'<>\s]+)\2/gi
+// A URL in plain text, without the punctuation that usually ends a sentence after it.
+const BARE_URL = /https?:\/\/[^\s<>"']*[^\s<>"'.,;:!?)\]]/g
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" }
 
+type Delivery = { settings: InstanceSettings; deliveryId: string; unsubscribeUrl: string }
+
 /**
  * Tracks one campaign delivery: its links go through /c to count clicks, and a pixel from /o
- * counts the open. The unsubscribe link and the plain-text part keep their real URLs.
+ * counts the open. The unsubscribe link keeps its real URL, and so does the plain-text part of
+ * an HTML email. A text-only email has no pixel, so only its clicks count.
  */
-export async function trackEmail(
-  html: string,
-  { settings, deliveryId, unsubscribeUrl }: {
-    settings: InstanceSettings
-    deliveryId: string
-    unsubscribeUrl: string
+export async function trackEmail<T extends { html: string | null; text: string }>(
+  email: T,
+  delivery: Delivery
+): Promise<T> {
+  const { html, text } = email
+  if (html === null) {
+    const tracked = await clickUrls(Array.from(text.matchAll(BARE_URL), ([url]) => url), delivery)
+    return { ...email, text: text.replace(BARE_URL, (url) => tracked.get(url) ?? url) }
   }
-) {
-  const urls = new Set(Array.from(html.matchAll(LINK), (match) => decodeEntities(match[3])))
-  urls.delete(unsubscribeUrl)
-  const tracked = new Map(
+  const tracked = await clickUrls(
+    Array.from(html.matchAll(LINK), (match) => decodeEntities(match[3])),
+    delivery
+  )
+  const { settings, deliveryId } = delivery
+  const openToken = await signToken(settings.secret, OPEN_PURPOSE, deliveryId)
+  const pixel = `<img src="${settings.publicUrl}/o/${openToken}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;">`
+  const trackedHtml = html
+    .replace(LINK, (link, start: string, quote: string, href: string) => {
+      const url = tracked.get(decodeEntities(href))
+      return url ? `${start}${quote}${url}${quote}` : link
+    })
+    .replace(/<\/body\s*>/i, (end) => `${pixel}\n${end}`)
+  return { ...email, html: trackedHtml }
+}
+
+/** Each URL's /c link, except the unsubscribe link's. */
+async function clickUrls(urls: string[], { settings, deliveryId, unsubscribeUrl }: Delivery) {
+  const unique = new Set(urls)
+  unique.delete(unsubscribeUrl)
+  return new Map(
     await Promise.all(
-      Array.from(urls, async (url) => {
+      Array.from(unique, async (url) => {
         const token = await signToken(settings.secret, CLICK_PURPOSE, clickPayload(deliveryId, url))
         return [url, `${settings.publicUrl}/c/${token}`] as const
       })
     )
   )
-  const openToken = await signToken(settings.secret, OPEN_PURPOSE, deliveryId)
-  const pixel = `<img src="${settings.publicUrl}/o/${openToken}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;">`
-  return html
-    .replace(LINK, (link, start: string, quote: string, href: string) => {
-      const url = tracked.get(decodeEntities(href))
-      return url ? `${start}${quote}${url}${quote}` : link
-    })
-    .replace("</body>", `${pixel}\n</body>`)
 }
 
 /**
