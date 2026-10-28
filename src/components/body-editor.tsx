@@ -139,10 +139,14 @@ function convert(message: Message, format: CampaignFormat, subject: string) {
   )
 }
 
-/** What's inside a document's body, which the editor then reads as well as it can. */
+/**
+ * What's inside a document's body, which the editor then reads as well as it can. Inline styles
+ * go: in emails they're layout, and the editor would read some as formatting.
+ */
 function documentBody(html: string) {
   const doc = new DOMParser().parseFromString(html, "text/html")
-  doc.querySelectorAll("style, script").forEach((element) => element.remove())
+  doc.querySelectorAll("style, script, [aria-hidden=true]").forEach((element) => element.remove())
+  doc.querySelectorAll("[style]").forEach((element) => element.removeAttribute("style"))
   return doc.body.innerHTML
 }
 
