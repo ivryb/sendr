@@ -8,6 +8,8 @@
     { "binding": "DB", "database_name": "sendr", "migrations_dir": "migrations" }
   ],
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "sendr-media" }],
+  // Browser Run, for the PNG previews of campaigns.
+  "browser": { "binding": "BROWSER" },
   "queues": {
     "producers": [{ "binding": "SEND_QUEUE", "queue": "sendr-send" }],
     "consumers": [

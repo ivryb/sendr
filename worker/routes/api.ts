@@ -27,6 +27,7 @@ import {
 } from "../domain/contacts"
 import { emailInput, getEmail, sendSingleEmail } from "../domain/emails"
 import { mediaQuery, uploadMedia } from "../domain/media"
+import { screenshotCampaign, screenshotQuery } from "../domain/screenshots"
 import {
   checkSender,
   connectSender,
@@ -178,6 +179,11 @@ export const api = new Hono<ApiEnv>()
   .delete("/campaigns/:id", requires("full"), async (c) => {
     await deleteDraft(c.req.param("id"))
     return c.json({ ok: true })
+  })
+  .get("/campaigns/:id/screenshot", requires("full"), async (c) => {
+    const { theme } = parseQuery(c, screenshotQuery)
+    const png = await screenshotCampaign(c.req.param("id"), theme)
+    return c.body(png, 200, { "content-type": "image/png", "cache-control": "no-store" })
   })
   .post("/campaigns/:id/test", requires("full"), async (c) => {
     const { to } = await parseJson(c, z.object({ to: z.email().optional() }))
