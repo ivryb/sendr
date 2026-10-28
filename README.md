@@ -1,10 +1,11 @@
 # Sendr
 
-Cloudflare-native marketing emails. Write a newsletter or product update in Markdown, send it to your users through Amazon SES, and keep everything (contacts, unsubscribes, stats) in your own Cloudflare account.
+Cloudflare-native marketing emails. Write a newsletter or product update with images and video, send it to your users through Amazon SES, and keep everything (contacts, unsubscribes, stats) in your own Cloudflare account.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/ivryb/sendr)
 
-- **Costs almost nothing to run.** Sendr is one Cloudflare Worker with a D1 database and a queue. SES charges about $0.10 per 1,000 emails.
+- **Costs almost nothing to run.** Sendr is one Cloudflare Worker with a D1 database, a queue and an R2 bucket. SES charges about $0.10 per 1,000 emails.
+- **Emails that look right.** Write in the editor, with images, GIFs, and video and audio cards, or bring your own HTML or plain text. The preview shows light and dark mode, and agents get the same as a PNG to show you before sending.
 - **Safe sending.** Every campaign goes to a small first batch, then pauses so you can check bounces and spam complaints before sending to everyone else.
 - **Unsubscribe that works.** Every email carries a visible unsubscribe link and the one-click unsubscribe headers Gmail and Apple Mail show as their own button.
 - **Your app stays in charge of users.** Your app pushes contacts to Sendr through a small API, keyed by your own user IDs.
@@ -26,10 +27,12 @@ The guide there has the agent explain Sendr, check it can reach your Cloudflare 
 
 ### By hand
 
-1. Click **Deploy to Cloudflare** above. Cloudflare copies this repo into your GitHub account, creates the D1 database and queue, and asks for `ADMIN_EMAIL`: your email. You sign in with it; nobody else can.
+1. Click **Deploy to Cloudflare** above. Cloudflare copies this repo into your GitHub account, creates the D1 database, queue and R2 bucket, and asks for `ADMIN_EMAIL`: your email. You sign in with it; nobody else can.
 2. Add a custom domain to the Worker (Workers & Pages > sendr > Settings > Domains & Routes), for example `emails.example.com`. Unsubscribe links use it, so pick one you'll keep. Sign in on this domain, not on `workers.dev`: passkeys only work on the domain they were created on, and the first sign-in saves it as the address for unsubscribe links.
 3. Open the domain and sign in with your email. Until Sendr can send email itself, sendr.soy delivers your login code (see [Login codes](#login-codes)). Add a passkey when asked.
 4. Add a sender in **Senders** (below), then create an API key on the **API** page and push your contacts.
+
+Your Cloudflare account needs R2 turned on before the first deploy: open R2 in the dashboard and enable it (the first 10 GB are free). Campaign previews use Browser Run, which needs no setup; the Workers Free plan allows 10 browser-minutes a day.
 
 To deploy from a terminal instead, clone the repo and run:
 
@@ -40,7 +43,7 @@ bunx react-router build && bunx wrangler deploy --domain emails.example.com && b
 bunx wrangler secret put ADMIN_EMAIL
 ```
 
-The first deploy creates the D1 database. The domain stays attached, so later deploys are `bun run deploy`.
+The first deploy creates the D1 database and the R2 bucket. The domain stays attached, so later deploys are `bun run deploy`.
 
 ## Add a sender
 
@@ -109,7 +112,9 @@ curl -X POST https://emails.example.com/api/v1/emails \
 
 ## Writing campaigns
 
-Campaigns are Markdown. Merge tags fill in contact data with a fallback: `Hey {{first_name|there}}`, `{{fields.plan|free}}`. The preview in the editor is rendered by the same code that sends the email. The footer under the message is shared by every campaign; include your postal address there, since anti-spam laws require one.
+Write campaigns in the editor: headings, lists, links, buttons, images and GIFs, and cards for video and audio, which email can't play, so they link to the file. Sendr lays them out for email clients in light and dark mode. A campaign can also be your own HTML or plain text. Merge tags fill in contact data with a fallback: `Hey {{first_name|there}}`, `{{fields.plan|free}}`. The preview in the editor is rendered by the same code that sends the email.
+
+Agents write campaigns through the API, upload media with `POST /api/v1/media`, and fetch `GET /api/v1/campaigns/{id}/screenshot`, a PNG of the email in light and dark, to show you before sending. The footer under the message is shared by every campaign; include your postal address there, since anti-spam laws require one.
 
 Starting a campaign sends it to the first batch (200 contacts by default) and pauses. Check delivered, bounced and complained counts, then approve sending to everyone else. As a rule of thumb, stop if more than about 5% bounce or 0.1% complain.
 
@@ -138,7 +143,7 @@ bun run test         # behavior tests in the Workers runtime
 bun run typecheck
 ```
 
-Copy `.dev.vars.example` to `.dev.vars`. It sets `EMAIL_PROVIDER=memory` and an empty `LOGIN_CODE_RELAY_URL`, so emails, including login codes, are printed to the dev server log instead of being sent. After changing `worker/db/schema.ts`, run `bun run db:generate` to create a migration.
+Copy `.dev.vars.example` to `.dev.vars`. It sets `EMAIL_PROVIDER=memory` and an empty `LOGIN_CODE_RELAY_URL`, so emails, including login codes, are printed to the dev server log instead of being sent. After changing `worker/db/schema.ts`, run `bun run db:generate` to create a migration. Screenshots work locally too: the dev server and tests run Browser Run on a Chrome that Wrangler downloads on first use.
 
 The Worker lives in `worker/` (Hono routes, domain logic, providers). The admin app in `src/` is a React Router app: each page in `src/pages/` loads its data on the server in a `loader` and saves through the same `/api/v1` API that apps and agents use (`worker/routes/api.ts`). Its routes are listed in `src/routes.ts`. Code both use (the domain model and the email renderer) lives in `shared/`. `site/` is the sendr.soy Worker, run by the Sendr project rather than by each instance. A new email service needs an `EmailProvider` adapter in `worker/email/`, plus its setup and checks in `worker/domain/senders.ts`.
 
