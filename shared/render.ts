@@ -312,13 +312,16 @@ function videoCard(media: MediaAttributes, src: string) {
     },
     badge
   )
-  const caption = mediaCaption(media, "")
+  const caption = mediaCaption(media, src, "")
+  // The caption is a row of the table: a title link after it, outside a cell, would make
+  // browsers split the card's link in two.
   return cardLink(
     media,
     src,
-    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;"><tr>${frame}</tr></table>${
-      caption && `<p class="sendr-text" style="margin:10px 0 0;color:${LIGHT.text};line-height:1.4;">${caption}</p>`
-    }`
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;"><tr>${frame}</tr>${
+      caption &&
+      `<tr><td class="sendr-text" style="padding:10px 0 0;color:${LIGHT.text};line-height:1.4;">${caption}</td></tr>`
+    }</table>`
   )
 }
 
@@ -328,7 +331,7 @@ function audioCard(media: MediaAttributes, src: string) {
   return cardLink(
     media,
     src,
-    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="sendr-border" style="border:1px solid ${LIGHT.border};border-radius:12px;border-collapse:separate;"><tr><td width="52" style="width:40px;padding:12px 0 12px 12px;">${circle}</td><td class="sendr-text" style="padding:12px 16px 12px 12px;color:${LIGHT.text};line-height:1.4;">${mediaCaption(media, "Listen")}</td></tr></table>`
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="sendr-border" style="border:1px solid ${LIGHT.border};border-radius:12px;border-collapse:separate;"><tr><td width="52" style="width:40px;padding:12px 0 12px 12px;">${circle}</td><td class="sendr-text" style="padding:12px 16px 12px 12px;color:${LIGHT.text};line-height:1.4;">${mediaCaption(media, src, "Listen")}</td></tr></table>`
   )
 }
 
@@ -343,11 +346,14 @@ function cardLink(media: MediaAttributes, src: string, inner: string) {
 // U+FE0E keeps iOS from drawing the triangle as an emoji.
 const PLAY = "&#9654;&#65038;"
 
-function mediaCaption(media: MediaAttributes, fallbackTitle: string) {
+/** The title links too: Outlook on Windows ignores a link around blocks, like the card's. */
+function mediaCaption(media: MediaAttributes, src: string, fallbackTitle: string) {
   const title = media["data-title"] || fallbackTitle
   const duration = media["data-duration"]
+  const strong = title && `<strong style="font-weight:600;">${escapeHtml(title)}</strong>`
   return [
-    title && `<strong style="font-weight:600;">${escapeHtml(title)}</strong>`,
+    strong &&
+      tag("a", { href: src, class: "sendr-text", style: `color:${LIGHT.text};text-decoration:none;` }, strong),
     duration && `<span class="sendr-muted" style="color:${LIGHT.muted};">${escapeHtml(duration)}</span>`,
   ]
     .filter(Boolean)
@@ -396,7 +402,7 @@ function nodeText(node: ChildNode): string {
   const { href, "data-src": src, "data-title": title } = node.attribs
   if (node.name === "br") return "\n"
   if (node.name === "li") return `\n- ${inner}`
-  if (node.name === "a" && href && !href.startsWith("#") && href !== inner) {
+  if (node.name === "a" && href && !href.startsWith("#") && href !== inner && !insideLink(node, href)) {
     // A link around blocks, like a rendered media card, is a block of its own.
     if (node.children.some((child) => isTag(child) && BLOCKS.has(child.name))) {
       return `\n\n${inner ? `${inner} (${href})` : href}\n\n`
@@ -405,6 +411,14 @@ function nodeText(node: ChildNode): string {
   }
   if (node.name === "figure" && src) return `\n\n${title ? `${title}: ` : ""}${src}\n\n`
   return BLOCKS.has(node.name) ? `\n\n${inner}\n\n` : inner
+}
+
+/** A link inside another to the same place, like a media card's title, is part of that one. */
+function insideLink(node: Element, href: string) {
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    if (isTag(parent) && parent.name === "a" && parent.attribs.href === href) return true
+  }
+  return false
 }
 
 function escapeHtml(text: string) {
