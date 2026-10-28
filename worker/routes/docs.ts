@@ -77,11 +77,16 @@ curl -X POST ${api}/emails \\
 A campaign is a message sent to every subscribed contact. Its \`body\` is written in one of three
 \`format\`s:
 
-- \`editor\` (default): a small HTML subset that Sendr lays out for email clients, light and dark:
-  \`h1\`-\`h3\`, \`p\`, \`strong\`, \`em\`, \`u\`, \`s\`, \`a href\`, \`ul\`/\`ol\`/\`li\`, \`blockquote\`, \`hr\`, \`br\`,
-  \`img src alt width\`. \`<a data-button href="...">Label</a>\` is a button. A video or audio card:
-  \`<figure data-media="video" data-src="URL" data-poster="URL" data-title="Title" data-duration="2:14"></figure>\`
-  (\`data-media="audio"\` has no poster; \`data-poster\` and \`data-duration\` are optional).
+- \`editor\` (default): a small HTML subset that Sendr lays out for email clients, light and dark.
+  Sendr styles these itself, so leave out \`style\` and \`class\`. Other tags pass through unstyled.
+  - Text: \`h1\`-\`h3\`, \`p\`, \`strong\`, \`em\`, \`u\`, \`s\`, \`a href\`, \`ul\`/\`ol\`/\`li\`, \`blockquote\`, \`hr\`, \`br\`.
+  - Image or GIF, as its own block: \`<img src="URL" alt="What it shows" width="1200">\`. It fills the
+    600px column at most.
+  - Button: \`<a data-button href="URL">Label</a>\`, as its own block.
+  - Video card: \`<figure data-media="video" data-src="URL" data-poster="URL" data-title="Title" data-duration="2:14"></figure>\`.
+    Email can't play video, so it shows the poster with a play badge and links to \`data-src\`.
+  - Audio card: the same with \`data-media="audio"\` and no poster.
+  Only \`data-src\` is required on a card. Upload files under Media first and use their URLs.
 - \`html\`: your own HTML, a full document or a fragment, sent as written with the footer added.
 - \`text\`: plain text, sent without an HTML part.
 
@@ -99,6 +104,11 @@ Statuses: draft, first_batch, awaiting_approval, sending, sent, cancelled.
   \`markdown\` instead of \`format\` and \`body\`) creates a draft. Without \`senderId\` it uses the first
   verified sender, or the first sender while none is.
 - \`PUT /campaigns/{id}\` edits a draft. \`DELETE /campaigns/{id}\` deletes a draft.
+- \`GET /campaigns/{id}/screenshot?theme=both\` returns a PNG of the email as a recipient sees it, under
+  a mail client's From and Subject. \`theme\` is \`light\`, \`dark\` or \`both\` (the default, side by side).
+  Merge tags show their fallbacks. Show it to the user before starting a campaign. It runs a browser
+  through Cloudflare Browser Run; \`503 browser_unavailable\` means it's busy or at its daily limit
+  (on the Workers Free plan, a new browser every 20 seconds and 10 browser-minutes a day), so retry later.
 - \`POST /campaigns/{id}/test\` with \`{ "to": "you@example.com" }\` sends one test copy. \`to\` is
   required with an API key.
 - \`POST /campaigns/{id}/start\`, \`/approve\`, \`/cancel\`.
@@ -121,10 +131,12 @@ Images, GIFs, video and audio for campaigns, stored by the instance and served f
   \`Content-Length\` is required (\`411\`). Optional \`poster=<image media id>\` (a video's or audio's
   cover) and \`duration=<seconds>\`. Returns 201 with \`{ "media": { "id", "kind", "url", "posterUrl",
   "durationSeconds", ... } }\`.
-- \`url\` is absolute and public: use it as an \`img src\` or a media card's \`data-src\`/\`data-poster\`.
+- \`url\` is absolute and public: use it as an \`img src\` or a card's \`data-src\`. For a video, upload
+  the poster image first, then the video with \`poster=<the image's id>\`, and use the video's \`url\`
+  and \`posterUrl\` as \`data-src\` and \`data-poster\`.
 
 \`\`\`sh
-curl -X POST "${api}/media?name=demo.mp4" \\
+curl -X POST "${api}/media?name=demo.mp4&poster=<image id>" \\
   -H "Authorization: Bearer $SENDR_API_KEY" -H "Content-Type: video/mp4" \\
   --data-binary @demo.mp4
 \`\`\`
