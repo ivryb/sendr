@@ -25,11 +25,8 @@ export default function RichEditor({
     editorProps: {
       attributes: { class: "email-doc", "aria-label": "Message" },
     },
-    // A body written elsewhere (Markdown from the API, converted HTML) is saved in the editor's form.
-    onCreate: ({ editor }) => {
-      const normalized = editorBody(editor)
-      if (normalized !== body) onChange(normalized)
-    },
+    // Only a real edit saves. Saving the body as the editor reads it on open would rewrite a
+    // draft just by viewing it, dropping any tags outside the editor's subset.
     onUpdate: ({ editor }) => onChange(editorBody(editor)),
   })
 
