@@ -16,15 +16,20 @@ export class ApiError extends Error {
   }
 }
 
+/** Calls the admin API. A Blob `body`, like an uploaded file, is sent as is; anything else as JSON. */
 export async function api<T>(
   path: string,
   init: { method?: string; body?: unknown } = {}
 ): Promise<T> {
+  const { body } = init
   const response = await fetch(path, {
-    method: init.method ?? (init.body === undefined ? "GET" : "POST"),
+    method: init.method ?? (body === undefined ? "GET" : "POST"),
     headers:
-      init.body === undefined ? {} : { "content-type": "application/json" },
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      body === undefined
+        ? {}
+        : { "content-type": body instanceof Blob ? body.type : "application/json" },
+    body:
+      body === undefined || body instanceof Blob ? body : JSON.stringify(body),
     credentials: "same-origin",
   })
   const data: unknown = await response.json().catch(() => ({}))

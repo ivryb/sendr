@@ -25,8 +25,8 @@ type Footer = { markdown: string; unsubscribeUrl: string }
 
 const marked = new Marked({ gfm: true, breaks: true, async: false })
 
-// {{first_name}}, {{first_name|there}}, {{fields.plan|free}}
-const MERGE_TAG = /\{\{\s*([\w.]+)\s*(?:\|([^}]*))?\}\}/g
+/** {{first_name}}, {{first_name|there}}, {{fields.plan|free}}: the tag, then its fallback. */
+export const MERGE_TAG =/\{\{\s*([\w.]+)\s*(?:\|([^}]*))?\}\}/g
 
 /** Each format's HTML part with the footer, merge tags still in it; a text campaign has none. */
 const HTML_PART: Record<CampaignFormat, (body: string, subject: string, footer: Footer) => string | null> = {

@@ -1,0 +1,334 @@
+/* The editor's content in the email's light theme: the renderer's fonts, sizes and colors (shared/render.ts). */
+
+.email-doc {
+  flex: 1;
+  width: 100%;
+  max-width: 552px;
+  margin: 0 auto;
+  outline: none;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  color: #1c1917;
+  overflow-wrap: break-word;
+}
+
+.email-doc :is(h1, h2, h3) {
+  margin: 28px 0 12px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+.email-doc h1 {
+  font-size: 28px;
+}
+.email-doc h2 {
+  font-size: 22px;
+}
+.email-doc h3 {
+  font-size: 18px;
+}
+/* The first block sits at the top of the email, as the renderer does it. */
+.email-doc > :first-child,
+.email-doc > :first-child > :is(h1, h2, h3) {
+  margin-top: 0;
+}
+
+.email-doc p {
+  margin: 0 0 16px;
+}
+
+.email-doc a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.email-doc :is(ul, ol) {
+  margin: 0 0 16px;
+  padding: 0 0 0 24px;
+}
+.email-doc ul {
+  list-style: disc;
+}
+.email-doc ol {
+  list-style: decimal;
+}
+.email-doc li {
+  margin: 0 0 6px;
+}
+.email-doc li > p {
+  margin: 0;
+}
+
+.email-doc blockquote {
+  margin: 0 0 16px;
+  padding: 2px 0 2px 16px;
+  border-left: 3px solid #e7e5e4;
+  color: #78716c;
+}
+.email-doc blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.email-doc hr {
+  height: 0;
+  margin: 28px 0;
+  border: 0;
+  border-top: 1px solid #e7e5e4;
+}
+
+.email-doc img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 0 16px;
+  border-radius: 8px;
+}
+
+.email-button-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0 24px;
+}
+.email-button {
+  min-width: 3rem;
+  padding: 12px 24px;
+  border-radius: 8px;
+  background: #1c1917;
+  color: #ffffff;
+  font-weight: 600;
+  line-height: 1.25;
+  outline: none;
+}
+.email-button-href {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: #a8a29e;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* Placeholders for an empty email and an empty button label. */
+.email-doc p.is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: #a8a29e;
+  pointer-events: none;
+}
+.email-button-row.is-empty .email-button::before {
+  content: "Button text";
+  color: #a8a29e;
+  pointer-events: none;
+}
+
+.email-doc .ProseMirror-selectednode {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+/* Merge tags */
+
+.merge-tag {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #f5f5f4;
+  box-shadow: inset 0 0 0 1px #e7e5e4;
+  font-size: 0.85em;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #1c1917;
+  white-space: nowrap;
+}
+.merge-tag-fallback {
+  font-weight: 400;
+  color: #a8a29e;
+}
+.merge-tag-fallback::before {
+  content: "· ";
+}
+
+/* Media cards */
+
+.media-card {
+  position: relative;
+  margin: 0 0 16px;
+  border-radius: 12px;
+  cursor: default;
+}
+.media-card[data-kind="video"] .media-frame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #1c1917;
+}
+.media-frame img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border-radius: 0;
+  object-fit: cover;
+}
+.media-play {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.6);
+  backdrop-filter: blur(8px);
+  color: #ffffff;
+}
+.media-play svg {
+  width: 20px;
+  height: 20px;
+  margin-left: 2px;
+}
+.media-frame .media-caption {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  max-width: calc(100% - 24px);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.5);
+  color: #ffffff;
+}
+.media-caption {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.media-title {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+  field-sizing: content;
+}
+.media-title::placeholder {
+  color: inherit;
+  opacity: 0.6;
+}
+.media-duration {
+  flex: none;
+  opacity: 0.75;
+}
+.media-duration::before {
+  content: "· ";
+}
+
+.media-card[data-kind="audio"] {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #fafaf9;
+  box-shadow: inset 0 0 0 1px #e7e5e4;
+}
+.media-card[data-kind="audio"] .media-play {
+  width: 36px;
+  height: 36px;
+  background: #1c1917;
+  backdrop-filter: none;
+}
+.media-card[data-kind="audio"] .media-play svg {
+  width: 14px;
+  height: 14px;
+}
+.media-card[data-kind="audio"] .media-caption {
+  flex-direction: column;
+  gap: 0;
+  flex: 1;
+}
+.media-card[data-kind="audio"] .media-duration {
+  font-size: 12px;
+  font-weight: 400;
+  color: #a8a29e;
+  opacity: 1;
+}
+.media-card[data-kind="audio"] .media-duration::before {
+  content: none;
+}
+.media-wave {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+}
+.media-wave span {
+  width: 3px;
+  border-radius: 999px;
+  background: #d6d3d1;
+}
+@media (max-width: 480px) {
+  .media-wave {
+    display: none;
+  }
+}
+
+/* Uploads in progress */
+
+.upload-placeholder {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #fafaf9;
+  box-shadow: inset 0 0 0 1px #e7e5e4;
+  font-size: 13px;
+  color: #78716c;
+}
+.upload-placeholder img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border-radius: 0;
+  object-fit: cover;
+  opacity: 0.35;
+}
+.upload-spinner,
+.upload-name {
+  position: relative;
+}
+.upload-spinner {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #d6d3d1;
+  border-top-color: #57534e;
+  border-radius: 999px;
+  animation: upload-spin 0.8s linear infinite;
+}
+@keyframes upload-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
