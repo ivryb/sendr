@@ -329,7 +329,7 @@ function videoCard(media: MediaAttributes, src: string) {
     },
     badge
   )
-  const caption = mediaCaption(media, src, "")
+  const caption = mediaCaption(media, src, "Watch")
   // The caption is a row of the table: a title link after it, outside a cell, would make
   // browsers split the card's link in two.
   return cardLink(

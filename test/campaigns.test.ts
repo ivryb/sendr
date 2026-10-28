@@ -88,7 +88,8 @@ describe("sending a campaign", () => {
     expect((await campaign(id)).counts).toMatchObject({ total: 5, sent: 5, queued: 0 })
   })
 
-  it("sends a list larger than one queue message without losing anyone", async () => {
+  // 250 contacts take 4-5 s while the screenshot test's browser runs alongside it.
+  it("sends a list larger than one queue message without losing anyone", { timeout: 15_000 }, async () => {
     await addContacts(250)
     const { id } = await newCampaign({ firstBatchSize: 200 })
     await act(id, "start")
