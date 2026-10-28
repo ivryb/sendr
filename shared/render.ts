@@ -89,9 +89,15 @@ export function markdownToHtml(markdown: string) {
   )
 }
 
-// Light colors are inline; dark ones override them through the sendr-* classes below.
-const LIGHT = { bg: "#ffffff", text: "#1c1917", muted: "#78716c", link: "#2563eb", border: "#e7e5e4" }
-const DARK = { bg: "#1c1917", text: "#f5f5f4", muted: "#a8a29e", link: "#60a5fa", border: "#44403c" }
+export type Scheme = "light" | "dark"
+
+/** The email's colors. Light ones are inline; dark ones override them through sendr-* classes. */
+export const PALETTE = {
+  light: { bg: "#ffffff", text: "#1c1917", muted: "#78716c", link: "#2563eb", border: "#e7e5e4" },
+  dark: { bg: "#1c1917", text: "#f5f5f4", muted: "#a8a29e", link: "#60a5fa", border: "#44403c" },
+} satisfies Record<Scheme, Record<string, string>>
+
+const { light: LIGHT, dark: DARK } = PALETTE
 
 const DARK_STYLES: [string, Record<string, string>][] = [
   ["bg", { "background-color": DARK.bg }],
@@ -102,7 +108,7 @@ const DARK_STYLES: [string, Record<string, string>][] = [
   ["button", { "background-color": DARK.text, "border-color": DARK.text, color: DARK.bg }],
 ]
 
-const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+export const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 // The 600px column less its side padding; Outlook ignores max-width, so wider images are capped.
 const CONTENT_WIDTH = 552
 
@@ -112,6 +118,17 @@ function darkCss(prefix = "") {
     const body = Object.entries(declarations).map(([property, color]) => `${property}: ${color} !important;`)
     return `${prefix}.sendr-${name} { ${body.join(" ")} }`
   }).join("\n")
+}
+
+/**
+ * An email as a client set to `scheme` shows it, whatever the viewer's own setting: its
+ * prefers-color-scheme queries then always or never apply. For previews and screenshots.
+ */
+export function withScheme(html: string, scheme: Scheme) {
+  return html.replace(
+    /@media\s*\(\s*prefers-color-scheme\s*:\s*(dark|light)\s*\)/gi,
+    (_, wanted: string) => (wanted.toLowerCase() === scheme ? "@media all" : "@media not all")
+  )
 }
 
 function layout(subject: string, body: string, footer = "") {

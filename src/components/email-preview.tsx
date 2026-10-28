@@ -4,11 +4,10 @@ import { Link } from "react-router"
 import { cn } from "cn"
 
 import { useAdmin } from "@/components/app-shell"
+import { useClientValue } from "@/lib/use-client-value"
 import { useDebounced } from "@/lib/use-debounced"
 import type { CampaignFormat } from "../../shared/model"
-import { renderEmail } from "../../shared/render"
-
-type Scheme = "light" | "dark"
+import { FONT, PALETTE, renderEmail, withScheme, type Scheme } from "../../shared/render"
 
 /**
  * The campaign as a recipient sees it in a mail client, rendered by the same code the Worker
@@ -92,11 +91,12 @@ export function EmailPreview({
       <MessageHeader subject={email.subject} from={from} dark={dark} />
       {email.html === null ? (
         <pre
-          className={cn(
-            "min-h-0 flex-1 overflow-auto px-6 py-5 text-base/relaxed whitespace-pre-wrap",
-            dark ? "bg-[#1c1917] text-[#f5f5f4]" : "bg-white text-[#1c1917]"
-          )}
-          style={{ fontFamily: EMAIL_FONT }}
+          className="min-h-0 flex-1 overflow-auto px-6 py-5 text-base/relaxed whitespace-pre-wrap"
+          style={{
+            fontFamily: FONT,
+            backgroundColor: PALETTE[scheme].bg,
+            color: PALETTE[scheme].text,
+          }}
         >
           {email.text}
         </pre>
@@ -107,10 +107,6 @@ export function EmailPreview({
   )
 }
 
-// The renderer's font stack, for text emails.
-const EMAIL_FONT =
-  "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
-
 function MessageHeader({
   subject,
   from,
@@ -120,10 +116,8 @@ function MessageHeader({
   from: { name: string; email: string } | null
   dark: boolean
 }) {
-  const time = useSyncExternalStore(
-    subscribeNever,
-    () => new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-    () => null
+  const time = useClientValue(() =>
+    new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
   )
   const muted = dark ? "text-stone-400" : "text-stone-500"
   return (
@@ -175,7 +169,7 @@ function EmailFrame({ html, scheme, grow }: { html: string; scheme: Scheme; grow
       ref={frame}
       sandbox="allow-same-origin"
       srcDoc={withScheme(html, scheme)}
-      style={{ colorScheme: scheme }}
+      style={{ colorScheme: scheme, backgroundColor: PALETTE[scheme].bg }}
       onLoad={() => {
         const view = frame.current?.contentWindow
         if (!view) return
@@ -195,20 +189,8 @@ function EmailFrame({ html, scheme, grow }: { html: string; scheme: Scheme; grow
         observer.observe(view.document.body)
         resize.current = observer
       }}
-      className={cn(
-        "min-h-0 w-full flex-1",
-        scheme === "dark" ? "bg-[#1c1917]" : "bg-white",
-        grow && "max-lg:flex-none"
-      )}
+      className={cn("min-h-0 w-full flex-1", grow && "max-lg:flex-none")}
     />
-  )
-}
-
-/** The email as a client set to `scheme` shows it, whatever the OS setting is. */
-function withScheme(html: string, scheme: Scheme) {
-  return html.replace(
-    /@media\s*\(\s*prefers-color-scheme\s*:\s*(dark|light)\s*\)/gi,
-    (_, wanted: string) => (wanted.toLowerCase() === scheme ? "@media all" : "@media not all")
   )
 }
 
@@ -266,8 +248,4 @@ function usePreviewScheme() {
     schemeListeners.forEach((listener) => listener())
   }
   return [scheme, setScheme] as const
-}
-
-function subscribeNever() {
-  return () => {}
 }

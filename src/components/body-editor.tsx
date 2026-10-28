@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useSyncExternalStore } from "react"
+import { lazy, Suspense, useState } from "react"
 import { cn } from "cn"
 
 import {
@@ -14,6 +14,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { useClientValue } from "@/lib/use-client-value"
 import { CAMPAIGN_FORMATS, type CampaignFormat } from "../../shared/model"
 import { bodyToText, editorBodyToHtml, markdownToHtml } from "../../shared/render"
 
@@ -170,11 +171,7 @@ function LazyRichEditor(props: {
   onChange: (body: string) => void
   className?: string
 }) {
-  const client = useSyncExternalStore(
-    subscribeNever,
-    () => true,
-    () => false
-  )
+  const client = useClientValue(() => true)
   const fallback = <EditorSkeleton className={props.className} />
   if (!client) return fallback
   return (
@@ -201,8 +198,4 @@ function EditorSkeleton({ className }: { className?: string }) {
       </div>
     </div>
   )
-}
-
-function subscribeNever() {
-  return () => {}
 }

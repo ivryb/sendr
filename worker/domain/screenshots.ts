@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers"
 import { html, raw } from "hono/html"
 import { z } from "zod"
 
-import { renderEmail } from "../../shared/render"
+import { FONT, PALETTE, renderEmail, withScheme } from "../../shared/render"
 import { DomainError } from "../lib/errors"
 import { getSettings } from "../lib/settings"
 import { findCampaign } from "./campaigns"
@@ -23,8 +23,6 @@ const CHROME = {
   light: { bg: "#fafaf9", text: "#1c1917", muted: "#78716c", border: "#e7e5e4" },
   dark: { bg: "#292524", text: "#f5f5f4", muted: "#a8a29e", border: "#44403c" },
 }
-
-const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 
 type Header = { from: { name: string; email: string } | null; subject: string }
 
@@ -64,8 +62,6 @@ async function shoot(content: string, width: number) {
   try {
     const tab = await browser.newPage()
     await tab.setViewport({ width, height: 400, deviceScaleFactor: 2 })
-    // Pinned, or the page follows the host's setting; the dark pane's swapped queries need light.
-    await tab.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }])
     await tab.setContent(content, { waitUntil: "load" })
     return new Uint8Array(await tab.screenshot({ type: "png", fullPage: true }))
   } finally {
@@ -100,19 +96,9 @@ function pane(theme: Theme, { from, subject }: Header, content: string) {
   <i style="border: 1px solid ${colors.border};">${theme === "light" ? "Light" : "Dark"}</i>
   <span>Subject</span><b style="color: ${subject ? colors.text : colors.muted};">${subject || "No subject yet"}</b>
 </header>
-<iframe sandbox="allow-same-origin" style="color-scheme: ${theme};" srcdoc="${theme === "dark" ? darken(content) : content}"
+<iframe sandbox="allow-same-origin" style="color-scheme: ${theme};" srcdoc="${withScheme(content, theme)}"
   onload="this.style.height = this.contentDocument.documentElement.scrollHeight + 'px'"></iframe>
 </section>`
-}
-
-/**
- * Chrome doesn't give an iframe its own prefers-color-scheme, and the page is pinned light, so
- * the dark copy swaps the email's light and dark media queries.
- */
-function darken(content: string) {
-  return content.replace(/(prefers-color-scheme\s*:\s*)(light|dark)/gi, (_, feature: string, scheme: string) =>
-    feature + (scheme.toLowerCase() === "dark" ? "light" : "dark")
-  )
 }
 
 /** A text campaign, pre-wrapped in the email font, light or dark like the HTML layout. */
@@ -121,8 +107,8 @@ function textDocument(text: string) {
 <meta charset="utf-8">
 <style>
 :root { color-scheme: light dark; }
-body { margin: 0; background: #ffffff; color: #1c1917; }
-@media (prefers-color-scheme: dark) { body { background: #1c1917; color: #f5f5f4; } }
+body { margin: 0; background: ${PALETTE.light.bg}; color: ${PALETTE.light.text}; }
+@media (prefers-color-scheme: dark) { body { background: ${PALETTE.dark.bg}; color: ${PALETTE.dark.text}; } }
 pre { margin: 0; padding: 32px 24px; font: 16px/1.6 ${raw(FONT)}; white-space: pre-wrap; overflow-wrap: anywhere; }
 </style>
 <pre>${text}</pre>`
