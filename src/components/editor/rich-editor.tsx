@@ -11,10 +11,13 @@ import "./editor.css"
  */
 export default function RichEditor({
   body,
+  converted = false,
   onChange,
   className,
 }: {
   body: string
+  /** The body was just converted from another format, so it's saved as the editor reads it. */
+  converted?: boolean
   onChange: (body: string) => void
   className?: string
 }) {
@@ -25,8 +28,12 @@ export default function RichEditor({
     editorProps: {
       attributes: { class: "email-doc", "aria-label": "Message" },
     },
-    // Only a real edit saves. Saving the body as the editor reads it on open would rewrite a
-    // draft just by viewing it, dropping any tags outside the editor's subset.
+    // Only a real edit or a switch from another format saves. Saving the body as the editor
+    // reads it on every open would rewrite a draft just by viewing it, dropping any tags
+    // outside the editor's subset.
+    onCreate: ({ editor }) => {
+      if (converted) onChange(editorBody(editor))
+    },
     onUpdate: ({ editor }) => onChange(editorBody(editor)),
   })
 

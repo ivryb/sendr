@@ -49,10 +49,15 @@ export function BodyEditor({
   className?: string
 }) {
   const [pending, setPending] = useState<(Message & { loss: string }) | null>(null)
+  const [converted, setConverted] = useState(false)
+  const apply = (message: Message) => {
+    setConverted(true)
+    onChange(message)
+  }
   const switchTo = (next: CampaignFormat) => {
-    const converted = convert({ format, body }, next, subject)
-    if (converted.loss && body.trim()) setPending({ ...converted, loss: converted.loss })
-    else onChange(converted)
+    const message = convert({ format, body }, next, subject)
+    if (message.loss && body.trim()) setPending({ ...message, loss: message.loss })
+    else apply({ format: message.format, body: message.body })
   }
 
   return (
@@ -77,6 +82,7 @@ export function BodyEditor({
       {format === "editor" ? (
         <LazyRichEditor
           body={body}
+          converted={converted}
           onChange={(next) => onChange({ body: next })}
           className={className}
         />
@@ -109,7 +115,7 @@ export function BodyEditor({
             <AlertDialogCancel>Keep it as is</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (pending) onChange({ format: pending.format, body: pending.body })
+                if (pending) apply({ format: pending.format, body: pending.body })
                 setPending(null)
               }}
             >
@@ -156,6 +162,7 @@ function documentBody(html: string) {
 /** Loads the editor's chunk on the client only, with a calm stand-in until it's there. */
 function LazyRichEditor(props: {
   body: string
+  converted: boolean
   onChange: (body: string) => void
   className?: string
 }) {
