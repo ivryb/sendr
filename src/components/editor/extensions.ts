@@ -37,8 +37,11 @@ const MergeTag = Node.create({
   renderText: ({ node }) => mergeTagText(node.attrs.name, node.attrs.fallback),
   addNodeView: () => mergeTagView,
   addInputRules() {
-    const find = new RegExp(`${MERGE_TAG.source}$`)
-    return [nodeInputRule({ find, type: this.type, getAttributes: tagAttributes })]
+    // Without groups: with one, the rule replaces only the first group, which left `{{` and
+    // the fallback as text around a chip of the name.
+    const find = new RegExp(`${MERGE_TAG.source.replace(/\((?!\?)/g, "(?:")}$`)
+    const getAttributes = ([tag]: string[]) => tagAttributes([...tag.matchAll(MERGE_TAG)][0])
+    return [nodeInputRule({ find, type: this.type, getAttributes })]
   },
   addPasteRules() {
     return [nodePasteRule({ find: MERGE_TAG, type: this.type, getAttributes: tagAttributes })]
@@ -176,7 +179,7 @@ function mergeTagText(name: string, fallback: string) {
   return fallback ? `{{${name}|${fallback}}}` : `{{${name}}}`
 }
 
-function tagAttributes(match: RegExpMatchArray) {
+function tagAttributes(match: string[]) {
   return { name: match[1], fallback: match[2]?.trim() ?? "" }
 }
 
