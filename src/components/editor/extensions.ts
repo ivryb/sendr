@@ -1,4 +1,3 @@
-import { Divider, Heading, StarterKit } from "@react-email/editor/extensions"
 import {
   Node,
   nodeInputRule,
@@ -9,6 +8,7 @@ import {
 import { Link } from "@tiptap/extension-link"
 import { Placeholder } from "@tiptap/extensions"
 import { DOMSerializer } from "@tiptap/pm/model"
+import { StarterKit } from "@tiptap/starter-kit"
 
 import { MERGE_TAG } from "../../../shared/render"
 import { buttonView, mediaCardView, mergeTagView } from "./node-views"
@@ -87,10 +87,10 @@ const MediaCard = Node.create({
     title: dataAttribute("title", null),
     duration: dataAttribute("duration", null),
   }),
-  // The figure is the stored body's; the link is the card in an HTML document. Both rank above
-  // the starter kit's catch-all block parsing and the link mark.
+  // The figure is the stored body's; the link is the card in an HTML document, above the link
+  // mark like the button.
   parseHTML: () => [
-    { tag: "figure[data-media]", priority: 1000 },
+    { tag: "figure[data-media]" },
     { tag: "a[data-media][data-src]", priority: 1000 },
   ],
   renderHTML: ({ HTMLAttributes }) => ["figure", HTMLAttributes],
@@ -99,42 +99,16 @@ const MediaCard = Node.create({
 
 export const EXTENSIONS = [
   StarterKit.configure({
-    // A paragraph always follows the last block, so there's a line to type on.
-    TrailingNode: { node: "paragraph", appendTo: "doc" },
-    // Replaced below: React Email draws headings and dividers with React components wrapped
-    // in extra elements, and its link writes its theme's inline styles into the link.
-    Heading: false,
-    Divider: false,
-    Link: false,
-    // For React Email's bubble menus; it moves the cursor to the top whenever the editor blurs.
-    FocusScopes: false,
+    heading: { levels: [1, 2, 3] },
     // Outside the renderer's subset.
-    Button: false,
-    Body: false,
-    Code: false,
-    CodeBlockPrism: false,
-    Container: false,
-    Div: false,
-    Section: false,
-    GlobalContent: false,
-    PreviewText: false,
-    PreservedStyle: false,
-    Sup: false,
-    Uppercase: false,
-    Table: false,
-    TableRow: false,
-    TableCell: false,
-    TableHeader: false,
-    TwoColumns: false,
-    ThreeColumns: false,
-    FourColumns: false,
-    ColumnsColumn: false,
-    AlignmentAttribute: false,
-    ClassAttribute: false,
-    StyleAttribute: false,
+    code: false,
+    codeBlock: false,
+    // Configured below, where it can be extended.
+    link: false,
+    // No gap cursor: the trailing paragraph gives the cursor a line after images and cards.
+    gapcursor: false,
+    dropcursor: { color: "#61a8f8", width: 4 },
   }),
-  Heading.extend({ addNodeView: null }).configure({ levels: [1, 2, 3] }),
-  Divider.extend({ addNodeView: null }),
   // Typing right after a link continues plain text.
   Link.extend({ inclusive: false }).configure({
     openOnClick: false,
@@ -178,7 +152,7 @@ export function editorBody(editor: Editor) {
   const fragment = DOMSerializer.fromSchema(editor.schema).serializeFragment(
     editor.state.doc.content
   )
-  // The starter kit's nodes carry editor classes, which emails don't need.
+  // The link keeps a class it was given, from pasted HTML or the renderer's own document.
   fragment.querySelectorAll("[class]").forEach((element) => element.removeAttribute("class"))
   fragment.querySelectorAll<HTMLElement>("span[data-merge-tag]").forEach((chip) => {
     chip.replaceWith(mergeTagText(chip.dataset.mergeTag!, chip.dataset.fallback ?? ""))
