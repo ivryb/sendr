@@ -28,23 +28,12 @@ const marked = new Marked({ gfm: true, breaks: true, async: false })
 // {{first_name}}, {{first_name|there}}, {{fields.plan|free}}
 const MERGE_TAG = /\{\{\s*([\w.]+)\s*(?:\|([^}]*))?\}\}/g
 
-/** Each format's email with merge tags still in it. */
-const FORMATS: Record<
-  CampaignFormat,
-  (body: string, subject: string, footer: Footer) => Omit<RenderedEmail, "subject">
-> = {
-  editor: (body, subject, footer) => {
-    const nodes = parseDocument(body).children
-    return {
-      html: layout(subject, renderNodes(nodes), footerBlock(footer)),
-      text: withFooterText(htmlToText(nodes), footer),
-    }
-  },
-  html: (body, _, footer) => ({
-    html: insertFooter(body, footerBlock(footer)),
-    text: withFooterText(htmlToText(parseDocument(body).children), footer),
-  }),
-  text: (body, _, footer) => ({ html: null, text: withFooterText(body, footer) }),
+/** Each format's HTML part with the footer, merge tags still in it; a text campaign has none. */
+const HTML_PART: Record<CampaignFormat, (body: string, subject: string, footer: Footer) => string | null> = {
+  editor: (body, subject, footer) =>
+    layout(subject, renderNodes(parseDocument(body).children), footerBlock(footer)),
+  html: (body, _, footer) => insertFooter(body, footerBlock(footer)),
+  text: () => null,
 }
 
 export function renderEmail(input: RenderInput): RenderedEmail {
@@ -62,12 +51,25 @@ export function renderEmail(input: RenderInput): RenderedEmail {
   const plain = (text: string) => text
 
   const footer = { markdown: input.footer, unsubscribeUrl: input.unsubscribeUrl }
-  const email = FORMATS[input.format](input.body, input.subject, footer)
+  const html = HTML_PART[input.format](input.body, input.subject, footer)
   return {
     subject: merge(input.subject, plain),
-    html: email.html && merge(email.html, escapeHtml),
-    text: merge(email.text, plain),
+    html: html && merge(html, escapeHtml),
+    text: merge(withFooterText(bodyToText(input.format, input.body), footer), plain),
   }
+}
+
+/**
+ * An editor body as a whole document in the campaign layout, for switching a campaign to the
+ * html format. Merge tags stay in, and sending adds the footer.
+ */
+export function editorBodyToHtml(subject: string, body: string) {
+  return layout(subject, renderNodes(parseDocument(body).children))
+}
+
+/** A body as plain text with its merge tags, for switching a campaign to the text format. */
+export function bodyToText(format: CampaignFormat, body: string) {
+  return format === "text" ? body : htmlToText(parseDocument(body).children)
 }
 
 /**
@@ -187,7 +189,8 @@ const ELEMENTS: Record<string, (node: Element) => string> = {
   p: (node) => {
     const [only, ...rest] = node.children.filter((child) => !isBlank(child))
     if (!rest.length && only && isTag(only) && isButton(only)) return button(only)
-    return tag("p", { style: "margin:0 0 16px;" }, renderNodes(node.children))
+    // An empty paragraph is a blank line in the editor, so it's one in the email too.
+    return tag("p", { style: "margin:0 0 16px;" }, only ? renderNodes(node.children) : "&nbsp;")
   },
   a: (node) =>
     isButton(node)
