@@ -10,6 +10,7 @@ import { Link } from "react-router"
 import { cn } from "cn"
 
 import { BackToCampaigns } from "@/components/back-link"
+import { CampaignStatusBadge } from "@/components/campaign-status"
 import { EmailPreview } from "@/components/email-preview"
 import {
   AlertDialog,
@@ -29,7 +30,6 @@ import {
   RATE_LIMITS,
   deliveryStats,
   engagementRate,
-  statusMeta,
 } from "@/lib/campaign"
 import { formatNumber, formatPercent, plural, useDates } from "@/lib/format"
 import { useChange } from "@/lib/mutations"
@@ -258,24 +258,9 @@ function StatusLine({ campaign }: { campaign: Campaign }) {
         stalled && "text-amber-600 dark:text-amber-400"
       )}
     >
-      <StatusLabel campaign={campaign} />
+      <CampaignStatusBadge campaign={campaign} />
       {text}
     </p>
-  )
-}
-
-function StatusLabel({ campaign }: { campaign: Campaign }) {
-  const { label, dot, tint } = statusMeta(campaign)
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium",
-        tint
-      )}
-    >
-      <span className={cn("size-1.5 rounded-full", dot)} />
-      {label}
-    </span>
   )
 }
 
