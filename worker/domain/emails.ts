@@ -1,7 +1,7 @@
 import { and, eq, inArray, or } from "drizzle-orm"
 import { z } from "zod"
 
-import { senderAddress, type Email } from "../../shared/model"
+import type { Email } from "../../shared/model"
 import { renderMessage } from "../../shared/render"
 import { db } from "../db/client"
 import { contacts, emails, senders } from "../db/schema"
@@ -52,8 +52,7 @@ export async function sendSingleEmail(input: z.infer<typeof emailInput>) {
     .returning()
   try {
     const { providerMessageId } = await senderProvider(sender).send({
-      from: senderAddress(sender),
-      replyTo: input.replyTo ?? (sender.replyTo || undefined),
+      replyTo: input.replyTo,
       to: input.to,
       ...content,
     })

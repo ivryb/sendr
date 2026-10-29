@@ -3,11 +3,12 @@ import { env } from "cloudflare:workers"
 import { html, raw } from "hono/html"
 import { z } from "zod"
 
-import { FONT, PALETTE, renderEmail, withScheme } from "../../shared/render"
+import { FONT, PALETTE, renderEmail, sampleRecipient, withScheme } from "../../shared/render"
 import { DomainError } from "../lib/errors"
 import { getSettings } from "../lib/settings"
 import { findCampaign } from "./campaigns"
 import { campaignSender, defaultSender } from "./senders"
+import { unsubscribeUrl } from "./sending"
 
 const THEMES = ["light", "dark"] as const
 type Theme = (typeof THEMES)[number]
@@ -35,13 +36,10 @@ export async function screenshotCampaign(id: string, theme: z.infer<typeof scree
   const campaign = await findCampaign(id)
   const [settings, sender] = await Promise.all([getSettings(), campaignSender(campaign)])
   const from = sender ?? (await defaultSender())
-  const email = renderEmail({
-    subject: campaign.subject,
-    format: campaign.format,
-    body: campaign.body,
+  const email = renderEmail(campaign, {
     footer: settings.footer,
-    recipient: { firstName: null, fields: {} },
-    unsubscribeUrl: `${settings.publicUrl}/u/test`,
+    recipient: sampleRecipient(),
+    unsubscribeUrl: await unsubscribeUrl(settings),
   })
   const header = { from, subject: email.subject }
   const content = email.html ?? (await textDocument(email.text)).toString()

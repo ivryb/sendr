@@ -2,20 +2,16 @@ import { isTag, isText, type ChildNode, type Element } from "domhandler"
 import { parseDocument } from "htmlparser2"
 import { Marked } from "marked"
 
-import type { CampaignFormat } from "./model"
+import type { Campaign, CampaignFormat } from "./model"
 
-/**
- * Renders a campaign for one recipient. Shared by sending and the admin app's live preview, so
- * it runs in both the Worker and the browser.
- */
-export type RenderInput = {
-  subject: string
-  format: CampaignFormat
-  body: string
-  footer: string
-  recipient: { firstName: string | null; fields: Record<string, string> }
-  unsubscribeUrl: string
-}
+/** The parts of a campaign that make its email. */
+type CampaignContent = Pick<Campaign, "subject" | "format" | "body">
+
+/** Whom merge tags greet: a contact, or the stand-in for one in previews and test sends. */
+type Recipient = { firstName: string | null; fields: Record<string, string> }
+
+/** The footer from settings (Markdown), and the recipient and their unsubscribe link. */
+type Delivery = { footer: string; recipient: Recipient; unsubscribeUrl: string }
 
 /** `html` is null for a text campaign, which is sent without an HTML part. */
 export type RenderedEmail = { subject: string; html: string | null; text: string }
@@ -36,10 +32,15 @@ const HTML_PART: Record<CampaignFormat, (body: string, subject: string, footer: 
   text: () => null,
 }
 
-export function renderEmail(input: RenderInput): RenderedEmail {
+/**
+ * Renders a campaign for one recipient. Sending, test sends, screenshots and the admin app's
+ * live preview all render through this, so it runs in both the Worker and the browser.
+ */
+export function renderEmail(campaign: CampaignContent, delivery: Delivery): RenderedEmail {
+  const { recipient } = delivery
   const value = (tag: string) => {
-    if (tag === "first_name") return input.recipient.firstName?.trim() || null
-    if (tag.startsWith("fields.")) return input.recipient.fields[tag.slice(7)] || null
+    if (tag === "first_name") return recipient.firstName?.trim() || null
+    if (tag.startsWith("fields.")) return recipient.fields[tag.slice(7)] || null
     return null
   }
   // The fallback is part of the template, so in HTML it's already escaped; only contact data is.
@@ -50,13 +51,18 @@ export function renderEmail(input: RenderInput): RenderedEmail {
     })
   const plain = (text: string) => text
 
-  const footer = { markdown: input.footer, unsubscribeUrl: input.unsubscribeUrl }
-  const html = HTML_PART[input.format](input.body, input.subject, footer)
+  const footer = { markdown: delivery.footer, unsubscribeUrl: delivery.unsubscribeUrl }
+  const html = HTML_PART[campaign.format](campaign.body, campaign.subject, footer)
   return {
-    subject: merge(input.subject, plain),
+    subject: merge(campaign.subject, plain),
     html: html && merge(html, escapeHtml),
-    text: merge(withFooterText(bodyToText(input.format, input.body), footer), plain),
+    text: merge(withFooterText(bodyToText(campaign.format, campaign.body), footer), plain),
   }
+}
+
+/** The recipient previews and test sends greet: the admin by first name, or no one. */
+export function sampleRecipient(name = ""): Recipient {
+  return { firstName: name.split(" ")[0] || null, fields: {} }
 }
 
 /**

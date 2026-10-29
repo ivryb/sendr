@@ -1,19 +1,19 @@
 import { env } from "cloudflare:workers"
 import { and, eq } from "drizzle-orm"
 
-import { renderEmail } from "../../shared/render"
+import { renderEmail, sampleRecipient } from "../../shared/render"
 import { db } from "../db/client"
 import { contacts, deliveries } from "../db/schema"
 import { PermanentSendError, type EmailProvider } from "../email/provider"
 import { senderProvider } from "../email/providers"
 import { signToken } from "../lib/crypto"
-import { senderAddress } from "../../shared/model"
 import { getSettings, type InstanceSettings } from "../lib/settings"
 import { advanceCampaign, CampaignError, findCampaign, type SendMessage } from "./campaigns"
 import { campaignSender } from "./senders"
 import { trackEmail } from "./tracking"
 
 export const UNSUBSCRIBE_PURPOSE = "unsubscribe"
+export const TEST_UNSUBSCRIBE_TOKEN = "test"
 
 const DELIVERIES_PER_MESSAGE = 100
 
@@ -53,10 +53,7 @@ export async function processSendMessage({ campaignId }: SendMessage) {
     }
     await pace()
     const url = await unsubscribeUrl(settings, contact.id)
-    const email = renderEmail({
-      subject: campaign.subject,
-      format: campaign.format,
-      body: campaign.body,
+    const email = renderEmail(campaign, {
       footer: settings.footer,
       recipient: contact,
       unsubscribeUrl: url,
@@ -68,8 +65,6 @@ export async function processSendMessage({ campaignId }: SendMessage) {
     })
     try {
       const { providerMessageId } = await provider.send({
-        from: senderAddress(sender),
-        replyTo: sender.replyTo || undefined,
         to: contact.email,
         ...tracked,
         headers: unsubscribeHeaders(url),
@@ -102,25 +97,23 @@ export async function sendTestEmail(
   const sender = await campaignSender(campaign)
   if (!sender) throw new CampaignError("not_ready", "Choose who this campaign is from first.")
   const settings = await getSettings()
-  const url = `${settings.publicUrl}/u/test`
-  const email = renderEmail({
-    subject: `[Test] ${campaign.subject}`,
-    format: campaign.format,
-    body: campaign.body,
-    footer: settings.footer,
-    recipient: { firstName: to.name.split(" ")[0] || null, fields: {} },
-    unsubscribeUrl: url,
-  })
-  await senderProvider(sender).send({
-    from: senderAddress(sender),
-    replyTo: sender.replyTo || undefined,
-    to: to.email,
-    ...email,
-  })
+  const email = renderEmail(
+    { ...campaign, subject: `[Test] ${campaign.subject}` },
+    {
+      footer: settings.footer,
+      recipient: sampleRecipient(to.name),
+      unsubscribeUrl: await unsubscribeUrl(settings),
+    }
+  )
+  await senderProvider(sender).send({ to: to.email, ...email })
 }
 
-export async function unsubscribeUrl(settings: InstanceSettings, contactId: string) {
-  return `${settings.publicUrl}/u/${await signToken(settings.secret, UNSUBSCRIBE_PURPOSE, contactId)}`
+/** A contact's unsubscribe link. Without one, the placeholder that test sends and screenshots show. */
+export async function unsubscribeUrl(settings: InstanceSettings, contactId?: string) {
+  const token = contactId
+    ? await signToken(settings.secret, UNSUBSCRIBE_PURPOSE, contactId)
+    : TEST_UNSUBSCRIBE_TOKEN
+  return `${settings.publicUrl}/u/${token}`
 }
 
 /** RFC 8058 one-click unsubscribe, shown by Gmail and Apple Mail as their own button. */

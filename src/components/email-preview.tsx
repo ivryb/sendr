@@ -7,7 +7,14 @@ import { useAdmin } from "@/components/app-shell"
 import { useClientValue } from "@/lib/use-client-value"
 import { useDebounced } from "@/lib/use-debounced"
 import type { CampaignFormat } from "../../shared/model"
-import { FONT, PALETTE, renderEmail, withScheme, type Scheme } from "../../shared/render"
+import {
+  FONT,
+  PALETTE,
+  renderEmail,
+  sampleRecipient,
+  withScheme,
+  type Scheme,
+} from "../../shared/render"
 
 /**
  * The campaign as a recipient sees it in a mail client, rendered by the same code the Worker
@@ -38,13 +45,10 @@ export function EmailPreview({
   const debouncedFooter = useDebounced(footer)
   const email = useMemo(
     () =>
-      renderEmail({
-        subject: debouncedSubject,
-        ...message,
-        footer: debouncedFooter,
-        recipient: { firstName: me.name.split(" ")[0] || null, fields: {} },
-        unsubscribeUrl: "#",
-      }),
+      renderEmail(
+        { subject: debouncedSubject, ...message },
+        { footer: debouncedFooter, recipient: sampleRecipient(me.name), unsubscribeUrl: "#" }
+      ),
     [debouncedSubject, message, debouncedFooter, me.name]
   )
   const [scheme, setScheme] = usePreviewScheme()

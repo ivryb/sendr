@@ -6,7 +6,7 @@ import { db } from "../db/client"
 import { contacts } from "../db/schema"
 import { setContactStatus } from "../domain/contacts"
 import { defaultSender } from "../domain/senders"
-import { UNSUBSCRIBE_PURPOSE } from "../domain/sending"
+import { TEST_UNSUBSCRIBE_TOKEN, UNSUBSCRIBE_PURPOSE } from "../domain/sending"
 import { verifyToken } from "../lib/crypto"
 import { getSettings } from "../lib/settings"
 
@@ -66,7 +66,7 @@ function unsubscribedPage(sender: string, token: string) {
 
 function invalidLinkPage(token: string) {
   // Test sends use a placeholder link, so a curious admin gets a clear answer.
-  return token === "test"
+  return token === TEST_UNSUBSCRIBE_TOKEN
     ? page("", "This is a test email", html`<p>Unsubscribe links work in real campaign emails.</p>`)
     : page("", "This link isn't valid", html`<p>It may be incomplete. Try the link from the email again.</p>`)
 }

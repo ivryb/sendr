@@ -12,7 +12,6 @@ import type { SenderRow } from "./db/schema"
 import { defaultSender } from "./domain/senders"
 import { memoryProvider, senderProvider } from "./email/providers"
 import { loginCodeEmail } from "../shared/login-code"
-import { senderAddress } from "../shared/model"
 import { getSettings, updateSettings, type InstanceSettings } from "./lib/settings"
 
 /** Auth is built per request: its secret lives in D1 and passkeys bind to the request's host. */
@@ -105,7 +104,7 @@ async function sendLoginCode(sender: SenderRow | null, email: string, otp: strin
   const relay = env.LOGIN_CODE_RELAY_URL
   if (sender?.verified) {
     try {
-      return void (await senderProvider(sender).send({ from: senderAddress(sender), ...message }))
+      return void (await senderProvider(sender).send(message))
     } catch (error) {
       if (!relay) throw error
       console.warn("Login code send failed, delivering it through sendr.soy instead", error)

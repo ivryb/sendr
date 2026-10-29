@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers"
 
+import { senderAddress } from "../../shared/model"
 import type { SenderRow } from "../db/schema"
 import type { EmailProvider, OutgoingEmail } from "./provider"
 import { CONFIGURATION_SET } from "./ses-account"
@@ -23,15 +24,21 @@ export function memoryProvider() {
   return env.EMAIL_PROVIDER === "memory" ? memory : null
 }
 
-/** The service that sends a sender's emails. */
-export function senderProvider(sender: SenderRow): EmailProvider {
-  const memory = memoryProvider()
-  if (memory) return memory
-  return sesProvider({
-    accessKeyId: sender.accessKeyId,
-    secretAccessKey: sender.secretAccessKey,
-    region: sender.region,
-    configurationSet: CONFIGURATION_SET,
-    maxSendsPerSecond: sender.maxSendRate,
-  })
+/** The service that sends a sender's emails, from its address and with its reply-to. */
+export function senderProvider(sender: SenderRow) {
+  const provider =
+    memoryProvider() ??
+    sesProvider({
+      accessKeyId: sender.accessKeyId,
+      secretAccessKey: sender.secretAccessKey,
+      region: sender.region,
+      configurationSet: CONFIGURATION_SET,
+      maxSendsPerSecond: sender.maxSendRate,
+    })
+  const from = senderAddress(sender)
+  return {
+    maxSendsPerSecond: provider.maxSendsPerSecond,
+    send: (email: Omit<OutgoingEmail, "from">) =>
+      provider.send({ ...email, from, replyTo: email.replyTo ?? (sender.replyTo || undefined) }),
+  } satisfies EmailProvider
 }
