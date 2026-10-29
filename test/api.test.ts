@@ -197,6 +197,33 @@ describe("safety", () => {
     expect(response.status).toBe(403)
   })
 
+  it("an Authorization header that isn't a Bearer key doesn't skip that check", async () => {
+    const response = await exports.default.fetch(
+      new Request("https://sendr.test/api/v1/settings", {
+        method: "PUT",
+        headers: {
+          cookie: admin,
+          origin: "https://evil.example",
+          "content-type": "text/plain",
+          authorization: "Basic YWRtaW46YWRtaW4=",
+        },
+        body: JSON.stringify({ footer: "Hacked" }),
+      })
+    )
+    expect(response.status).toBe(403)
+    const settings = await request("/api/v1/settings", { cookie: admin })
+    expect(await settings.json()).toMatchObject({ footer: "" })
+  })
+
+  it("refuses an Authorization header that isn't a Bearer key, even with a session", async () => {
+    const response = await request("/api/v1/me", {
+      cookie: admin,
+      headers: { authorization: "Basic YWRtaW46YWRtaW4=" },
+    })
+    expect(response.status).toBe(401)
+    expect(await response.json()).toMatchObject({ error: "invalid_api_key" })
+  })
+
   it("an app's server can call with its key and no Origin or content type, as curl does", async () => {
     const key = await createApiKey(admin, ["contacts"])
     const response = await exports.default.fetch(

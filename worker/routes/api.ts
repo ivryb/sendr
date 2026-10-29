@@ -1,4 +1,4 @@
-import { Hono } from "hono"
+import { Hono, type Context } from "hono"
 import { csrf } from "hono/csrf"
 import { createMiddleware } from "hono/factory"
 import { z } from "zod"
@@ -54,8 +54,16 @@ type Caller = { admin: Admin | null; permissions: ApiKeyPermission[] }
 
 type ApiEnv = { Variables: { caller: Caller } }
 
+/** The API key in an `Authorization: Bearer` header. */
+const bearerToken = (c: Context) => c.req.header("authorization")?.match(/^Bearer (.+)$/)?.[1]
+
 const authenticate = createMiddleware<ApiEnv>(async (c, next) => {
-  const token = c.req.header("authorization")?.match(/^Bearer (.+)$/)?.[1]
+  const token = bearerToken(c)
+  // Any other Authorization is refused, not read as a session call, so a caller that means to
+  // send a key never ends up using the session by mistake.
+  if (!token && c.req.header("authorization") !== undefined) {
+    return c.json({ error: "invalid_api_key", message: "Send the API key as Authorization: Bearer <key>." }, 401)
+  }
   if (token) {
     const key = await findApiKey(token)
     if (!key) return c.json({ error: "invalid_api_key", message: "That API key doesn't exist." }, 401)
@@ -122,8 +130,9 @@ export const api = new Hono<ApiEnv>()
   })
   // Form posts from another site, even a sibling subdomain, can't ride the admin's session.
   // Calls with an API key carry no session to ride, and curl and server-side fetch send no
-  // Origin, which csrf() would refuse.
-  .use((c, next) => (c.req.header("authorization") ? next() : csrfGuard(c, next)))
+  // Origin, which csrf() would refuse. Only a Bearer key skips the check: authenticate uses
+  // the session for anything else.
+  .use((c, next) => (bearerToken(c) ? next() : csrfGuard(c, next)))
   .use(authenticate)
   .get("/me", (c) => {
     const { admin, permissions } = c.get("caller")
