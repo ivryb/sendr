@@ -2,7 +2,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm"
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core"
 
 import type { CampaignLink } from "../../shared/model"
-import type { RenderedEmail } from "../../shared/render"
+import { MERGE_TAG, type RenderedEmail } from "../../shared/render"
 import { db } from "../db/client"
 import { clicks, deliveries } from "../db/schema"
 import { decodeBase64Url, encodeBase64Url, signToken, verifyToken } from "../lib/crypto"
@@ -11,10 +11,12 @@ import { getSettings, type InstanceSettings } from "../lib/settings"
 const CLICK_PURPOSE = "click"
 const OPEN_PURPOSE = "open"
 
-// An http(s) link's href in rendered HTML: `<a href="...">`, from the editor or raw HTML.
-const LINK = /(<a\s(?:[^>]*?\s)?href=)(["'])(https?:\/\/[^"'<>\s]+)\2/gi
-// A URL in plain text, without the punctuation that usually ends a sentence after it.
-const BARE_URL = /https?:\/\/[^\s<>"']*[^\s<>"'.,;:!?)\]]/g
+// An http(s) link's href in rendered HTML: `<a href="...">`, from the editor or raw HTML. Spaces
+// are part of it: a merge tag can have them, like `{{ first_name | my friend }}`.
+const LINK = /(<a\s(?:[^>]*?\s)?href=)(["'])(https?:\/\/[^"'<>]+)\2/gi
+// A URL in plain text, without the punctuation that usually ends a sentence after it. A merge
+// tag in it is one piece, spaces and all, though a value filled in still ends the URL at a space.
+const BARE_URL = /https?:\/\/(?:\{\{[^}]*\}\}|[^\s<>"'])*[^\s<>"'.,;:!?)\]]/g
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" }
 
@@ -52,14 +54,17 @@ function links({ html, text }: { html: string | null; text: string }) {
 }
 
 /**
- * The campaign's own links, as patterns a sent link must match to be tracked. A merge tag
- * matches anything, but only after the host, so a contact whose name is a URL, or whose field
- * fills a whole link, can't get a signed redirect to wherever they like.
+ * The campaign's own links, as patterns a sent link must match to be tracked. A merge tag, as
+ * the renderer reads it, matches anything, but only after the host, so a contact whose name is
+ * a URL, or whose field fills a whole link, can't get a signed redirect to wherever they like.
  */
 function writtenLinks(urls: string[]) {
   return urls
     .filter((url) => !/^https?:\/\/[^/?#]*\{\{/i.test(url))
-    .map((url) => new RegExp(`^${url.split(/\{\{.*?\}\}/).map(escapeRegExp).join(".*")}$`))
+    .map((url) => {
+      const pieces = url.replace(MERGE_TAG, "\0").split("\0")
+      return new RegExp(`^${pieces.map(escapeRegExp).join(".*")}$`)
+    })
 }
 
 /** Each URL's /c link, except the unsubscribe link's. */

@@ -595,6 +595,24 @@ describe("tracking clicks and opens", () => {
     expect(html.html).toMatch(/<a href="https:\/\/sendr\.test\/c\/[^"]+">News<\/a> https:\/\/evil\.example\/login/)
   })
 
+  it("tracks a link whose merge tag has spaces, as the renderer fills it", async () => {
+    await addContacts(2)
+    const { id } = await newCampaign({
+      markdown: undefined,
+      format: "html",
+      body: '<p><a href="https://acme.com/hi?name={{ first_name | my friend }}">Hi</a></p>',
+    })
+    await act(id, "start")
+    await reachStatus(id, "sent")
+
+    const landing = async (to: string) => {
+      const [link] = clickLinks(emailTo(to).html)
+      return link && (await click(link)).headers.get("location")
+    }
+    expect(await landing("reader0@example.com")).toBe("https://acme.com/hi?name=Ann")
+    expect(await landing("reader1@example.com")).toBe("https://acme.com/hi?name=my friend")
+  })
+
   it("a tampered click link can't redirect anywhere else", async () => {
     await sendTracked()
     const [docs] = clickLinks(emailTo("reader0@example.com").html)
