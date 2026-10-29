@@ -1,3 +1,4 @@
+import { CONTACTS_BATCH_LIMIT } from "../../shared/model"
 import { SES_KEY_POLICY } from "../../shared/ses"
 
 /** The API reference served at /api/v1/docs, written for agents and developers to read. */
@@ -30,10 +31,11 @@ Contacts are keyed by your app's user ID (\`externalId\`), so an email change up
 same contact. New contacts start subscribed.
 
 - \`PUT /contacts/{externalId}\` with \`{ "email", "firstName"?, "fields"?: { "plan": "pro" }, "unsubscribed"?: true }\`
-  adds or updates one contact. \`409 email_taken\` if the email belongs to another user ID.
+  adds or updates one contact. \`409 email_taken\` if another contact has the email.
   \`unsubscribed: true\` unsubscribes. Updating a contact never resubscribes it.
-- \`POST /contacts/batch\` with \`{ "contacts": [{ "externalId"?, "email", ... }] }\`, up to 1,000, adds or
-  updates each in order and returns \`results\` in the same order. Without \`externalId\` a contact is
+- \`POST /contacts/batch\` with \`{ "contacts": [{ "externalId"?, "email", ... }] }\`, up to
+  ${CONTACTS_BATCH_LIMIT.toLocaleString("en-US")}, adds or updates each in order and returns
+  \`results: [{ "externalId"?, "email", "ok", "error"? }]\` in the same order. List each contact once per call. Without \`externalId\` a contact is
   matched by email, which imports a list from another tool; a later call with the user ID attaches
   to the same contact. Mark anyone the old tool had as unsubscribed, bounced or complained with
   \`unsubscribed: true\`.

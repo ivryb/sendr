@@ -104,7 +104,7 @@ curl -X DELETE https://emails.example.com/api/v1/contacts/user_123 -H "Authoriza
 - To import a list from another tool, leave out `externalId`: the batch call matches those contacts by email, and your app's later calls with a user ID attach to them.
 - Updating a contact never resubscribes it. Only the recipient (from the unsubscribe page) or an admin can.
 - Deleting someone who unsubscribed, bounced or complained keeps their address on file, so adding them back keeps them opted out.
-- An email that already belongs to another user ID is rejected with `409`. Every call is safe to repeat, so rerunning a full backfill repairs any drift.
+- An email that already belongs to another contact is rejected with `409`. Every call is safe to repeat, so rerunning a full backfill repairs any drift.
 
 ### Send single emails
 

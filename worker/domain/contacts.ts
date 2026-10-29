@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, like, or, sql, type SQL } from "drizzle-orm"
+import { and, desc, eq, getTableColumns, inArray, like, or, sql, type SQL } from "drizzle-orm"
 import type { BatchItem } from "drizzle-orm/batch"
 import { z } from "zod"
 
@@ -16,46 +16,43 @@ export const contactInput = z.object({
 export type ContactInput = z.infer<typeof contactInput>
 
 /** A contact to add or update: keyed by the host's user ID when it has one, otherwise by email. */
-export type ContactUpsert = ContactInput & { externalId?: string }
+export const contactUpsertInput = contactInput.extend({ externalId: z.string().min(1).optional() })
+export type ContactUpsert = z.infer<typeof contactUpsertInput>
 export type UpsertResult = { ok: true } | { ok: false; error: "email_taken" }
 
 type ContactRow = typeof contacts.$inferSelect
 
 /** D1 binds at most 100 parameters per statement. */
 const LOOKUP_CHUNK = 50
-const INSERT_CHUNK = 11
-
-export async function upsertContact(externalId: string, input: ContactInput) {
-  const [result] = await upsertContacts([{ ...input, externalId }])
-  return result
-}
+const INSERT_CHUNK = Math.floor(100 / Object.keys(getTableColumns(contacts)).length)
 
 /**
- * Adds or updates contacts in order, as if one at a time, in a few queries: Workers Free allows
- * 50 D1 queries per request, and a batch can hold 1,000 contacts.
+ * Adds or updates contacts in order, in a few queries: Workers Free allows 50 D1 queries per
+ * request. The results match one call per contact as long as each contact is listed once.
  */
 export async function upsertContacts(batch: ContactUpsert[]): Promise<UpsertResult[]> {
   const index = await loadIndex(batch)
-  const created = new Set<ContactRow>()
-  const changed = new Set<ContactRow>()
-  const results = batch.map((item) => {
-    const result = applyUpsert(index, item)
-    if (result.ok) (result.created ? created : changed).add(result.row)
-    return result.ok ? { ok: true as const } : result
-  })
-  await save([...changed].filter((row) => !created.has(row)), [...created])
+  const results = batch.map((item) => applyUpsert(index, item))
+  await save(index)
   return results
 }
 
-type Index = { byEmail: Map<string, ContactRow>; byExternalId: Map<string, ContactRow> }
+type Index = {
+  byEmail: Map<string, ContactRow>
+  byExternalId: Map<string, ContactRow>
+  created: Set<ContactRow>
+  changed: Set<ContactRow>
+  statusChanged: Set<ContactRow>
+}
 
 async function loadIndex(batch: ContactUpsert[]): Promise<Index> {
   const chunks = []
   for (let i = 0; i < batch.length; i += LOOKUP_CHUNK) chunks.push(batch.slice(i, i + LOOKUP_CHUNK))
+  const database = db()
   const rows = await Promise.all(
     chunks.map((chunk) => {
       const externalIds = chunk.flatMap((item) => (item.externalId ? [item.externalId] : []))
-      return db()
+      return database
         .select()
         .from(contacts)
         .where(
@@ -66,7 +63,13 @@ async function loadIndex(batch: ContactUpsert[]): Promise<Index> {
         )
     })
   )
-  const index: Index = { byEmail: new Map(), byExternalId: new Map() }
+  const index: Index = {
+    byEmail: new Map(),
+    byExternalId: new Map(),
+    created: new Set(),
+    changed: new Set(),
+    statusChanged: new Set(),
+  }
   for (const row of rows.flat()) addToIndex(index, row)
   return index
 }
@@ -76,10 +79,7 @@ function addToIndex(index: Index, row: ContactRow) {
   if (row.externalId) index.byExternalId.set(row.externalId, row)
 }
 
-function applyUpsert(
-  index: Index,
-  { externalId, ...input }: ContactUpsert
-): { ok: true; row: ContactRow; created: boolean } | { ok: false; error: "email_taken" } {
+function applyUpsert(index: Index, { externalId, ...input }: ContactUpsert): UpsertResult {
   const byEmail = index.byEmail.get(input.email)
   const existing = (externalId && index.byExternalId.get(externalId)) || byEmail
   // An address held by another contact stays theirs, even one imported without a user ID: moving
@@ -116,25 +116,38 @@ function applyUpsert(
   if (externalId) row.externalId = externalId
   if (input.firstName !== undefined) row.firstName = input.firstName
   if (input.fields) row.fields = input.fields
-  if (status) Object.assign(row, { status, statusChangedAt: now })
+  if (status) {
+    Object.assign(row, { status, statusChangedAt: now })
+    index.statusChanged.add(row)
+  }
   addToIndex(index, row)
-  return { ok: true, row, created: !existing }
+  ;(existing ? index.changed : index.created).add(row)
+  return { ok: true }
 }
 
 /** Updates run first, so an address an existing contact moved away from is free to insert. */
-async function save(updated: ContactRow[], created: ContactRow[]) {
-  const statements: BatchItem<"sqlite">[] = updated.map(
-    ({ id, externalId, email, firstName, fields, status, statusChangedAt }) =>
-      db()
+async function save({ created, changed, statusChanged }: Index) {
+  const database = db()
+  const statements: BatchItem<"sqlite">[] = []
+  for (const row of changed) {
+    if (created.has(row)) continue
+    const { id, externalId, email, firstName, fields, status, statusChangedAt } = row
+    // Only a status this call changed is written, so an unsubscribe, bounce or complaint that
+    // lands while a big import runs isn't overwritten with the status read before it.
+    const statusChange = statusChanged.has(row) && { status, statusChangedAt }
+    statements.push(
+      database
         .update(contacts)
-        .set({ externalId, email, firstName, fields, status, statusChangedAt })
+        .set({ externalId, email, firstName, fields, ...statusChange })
         .where(eq(contacts.id, id))
-  )
-  for (let i = 0; i < created.length; i += INSERT_CHUNK) {
-    statements.push(db().insert(contacts).values(created.slice(i, i + INSERT_CHUNK)))
+    )
+  }
+  const inserts = [...created]
+  for (let i = 0; i < inserts.length; i += INSERT_CHUNK) {
+    statements.push(database.insert(contacts).values(inserts.slice(i, i + INSERT_CHUNK)))
   }
   const [first, ...rest] = statements
-  if (first) await db().batch([first, ...rest])
+  if (first) await database.batch([first, ...rest])
 }
 
 /**
@@ -180,7 +193,8 @@ export async function listContacts(filter: {
       .select()
       .from(contacts)
       .where(where)
-      .orderBy(desc(contacts.createdAt), desc(contacts.id))
+      // rowid keeps the order of contacts added in one call, which share a created_at.
+      .orderBy(desc(contacts.createdAt), desc(sql`rowid`))
       .limit(filter.limit ?? 50)
       .offset(filter.offset ?? 0),
     db().select({ total: sql<number>`count(*)` }).from(contacts).where(where),

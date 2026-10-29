@@ -103,6 +103,9 @@ export type Media = {
   createdAt: string
 }
 
+/** Contacts one `POST /contacts/batch` call can add or update. */
+export const CONTACTS_BATCH_LIMIT = 1000
+
 export type Contact = {
   id: string
   externalId: string | null

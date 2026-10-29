@@ -118,7 +118,7 @@ export async function startCampaign(id: string, settings: InstanceSettings) {
   await env.DB.prepare(
     `INSERT OR IGNORE INTO deliveries (id, campaign_id, contact_id, batch, status)
      SELECT lower(hex(randomblob(16))), ?1, id,
-       CASE WHEN row_number() OVER (ORDER BY created_at, id) <= ?2 THEN 'first' ELSE 'rest' END,
+       CASE WHEN row_number() OVER (ORDER BY created_at, rowid) <= ?2 THEN 'first' ELSE 'rest' END,
        'queued'
      FROM contacts WHERE status = 'subscribed'`
   )

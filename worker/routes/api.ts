@@ -3,7 +3,12 @@ import { csrf } from "hono/csrf"
 import { createMiddleware } from "hono/factory"
 import { z } from "zod"
 
-import { API_KEY_PERMISSIONS, CONTACT_STATUSES, type ApiKeyPermission } from "../../shared/model"
+import {
+  API_KEY_PERMISSIONS,
+  CONTACT_STATUSES,
+  CONTACTS_BATCH_LIMIT,
+  type ApiKeyPermission,
+} from "../../shared/model"
 import { getAdmin, type Admin } from "../auth"
 import { createApiKey, deleteApiKey, findApiKey, listApiKeys, touchApiKey } from "../domain/apiKeys"
 import {
@@ -23,7 +28,7 @@ import {
   deleteContact,
   listContacts,
   setContactStatus,
-  upsertContact,
+  contactUpsertInput,
   upsertContacts,
 } from "../domain/contacts"
 import { emailInput, getEmail, sendSingleEmail } from "../domain/emails"
@@ -83,8 +88,6 @@ function requires(permission: ApiKeyPermission | "admin") {
 
 const csrfGuard = csrf()
 
-const BATCH_LIMIT = 1000
-
 const contactsQuery = z.object({
   q: z.string().optional(),
   status: z.enum(CONTACT_STATUSES).optional(),
@@ -94,9 +97,9 @@ const contactsQuery = z.object({
 
 const batchInput = z.object({
   contacts: z
-    .array(contactInput.extend({ externalId: z.string().min(1).optional() }))
+    .array(contactUpsertInput)
     .min(1)
-    .max(BATCH_LIMIT),
+    .max(CONTACTS_BATCH_LIMIT),
 })
 
 const settingsInput = z
@@ -134,7 +137,8 @@ export const api = new Hono<ApiEnv>()
     return c.json({ ...list, counts })
   })
   .put("/contacts/:externalId", requires("contacts"), async (c) => {
-    const result = await upsertContact(c.req.param("externalId"), await parseJson(c, contactInput))
+    const input = await parseJson(c, contactInput)
+    const [result] = await upsertContacts([{ ...input, externalId: c.req.param("externalId") }])
     return result.ok ? c.json(result) : c.json(result, 409)
   })
   .post("/contacts/batch", requires("contacts"), async (c) => {

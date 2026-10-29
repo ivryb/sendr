@@ -50,6 +50,7 @@ import { formatNumber, useDates } from "@/lib/format"
 import { useChange } from "@/lib/mutations"
 import {
   CONTACT_STATUSES,
+  CONTACTS_BATCH_LIMIT,
   type Contact,
   type ContactStatus,
 } from "../../shared/model"
@@ -373,10 +374,11 @@ function ConnectContacts({ origin }: { origin: string }) {
         </EmptyMedia>
         <EmptyTitle>Connect your contacts</EmptyTitle>
         <EmptyDescription>
-          Sendr doesn't import spreadsheets. Your app tells it who your users
-          are, so the list stays current on its own. Create a key on the{" "}
-          <Link to="/api">API</Link> page, then call the contacts API whenever
-          someone signs up or changes their email.
+          Your app tells Sendr who your users are, so the list stays current
+          on its own. Create a key on the <Link to="/api">API</Link> page,
+          then call the contacts API whenever someone signs up or changes
+          their email. To bring a list from another tool, ask your agent to
+          import it.
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent className="max-w-none items-stretch gap-6">
@@ -392,7 +394,8 @@ function ConnectContacts({ origin }: { origin: string }) {
         </div>
         <div className="flex flex-col gap-2">
           <p className="text-sm text-muted-foreground">
-            Or send up to 100 at a time.
+            Or send up to {CONTACTS_BATCH_LIMIT.toLocaleString("en-US")} at a
+            time.
           </p>
           <CodeBlock code={batch} />
         </div>
