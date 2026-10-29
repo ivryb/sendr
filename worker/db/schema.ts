@@ -199,11 +199,17 @@ export const apiKeys = sqliteTable("api_keys", {
 })
 
 /** How many login codes each address asked for since `windowStart`, to cap code guessing. */
-export const loginCodeRequests = sqliteTable("login_code_requests", {
-  email: text("email").primaryKey(),
-  windowStart: timestamp("window_start").notNull(),
-  count: integer("count").notNull(),
-})
+export const loginCodeRequests = sqliteTable(
+  "login_code_requests",
+  {
+    email: text("email").primaryKey(),
+    windowStart: timestamp("window_start").notNull(),
+    count: integer("count").notNull(),
+  },
+  // Each code request deletes the expired rows; without this, that read every row, so a flood
+  // of requests for random addresses could use up Workers Free's daily reads.
+  (table) => [index("login_code_requests_window_idx").on(table.windowStart)]
+)
 
 /** One row (id 1) holding operator settings and secrets generated on first run. */
 export const settings = sqliteTable("settings", {

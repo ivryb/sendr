@@ -88,6 +88,18 @@ describe("contacts API", () => {
     expect(atAnn).toMatchObject([{ externalId: "u1", status: "unsubscribed" }])
   })
 
+  it("a contact can't take over an opted-out contact imported with a name", async () => {
+    await request("/api/v1/contacts/batch", {
+      bearer: apiKey,
+      json: { contacts: [{ email: "ann@example.com", firstName: "Ann", unsubscribed: true }] },
+    })
+    await upsert("u9", { email: "other@example.com" })
+    expect((await upsert("u9", { email: "ann@example.com" })).status).toBe(409)
+    expect(await listContacts("?q=ann")).toMatchObject([
+      { externalId: null, email: "ann@example.com", firstName: "Ann", status: "unsubscribed" },
+    ])
+  })
+
   it("rejects an email that belongs to another user", async () => {
     await upsert("u1", { email: "ann@example.com" })
     const response = await upsert("u2", { email: "ann@example.com" })

@@ -12,8 +12,9 @@ const CLICK_PURPOSE = "click"
 const OPEN_PURPOSE = "open"
 
 // An http(s) link's href in rendered HTML: `<a href="...">`, from the editor or raw HTML. Spaces
-// are part of it: a merge tag can have them, like `{{ first_name | my friend }}`.
-const LINK = /(<a\s(?:[^>]*?\s)?href=)(["'])(https?:\/\/[^"'<>]+)\2/gi
+// are part of it: a merge tag can have them, like `{{ first_name | my friend }}`. A line break
+// isn't: a redirect can't carry it, so a wrapped href stays as written, as mail clients mend it.
+const LINK = /(<a\s(?:[^>]*?\s)?href=)(["'])(https?:\/\/[^"'<>\r\n]+)\2/gi
 // A URL in plain text, without the punctuation that usually ends a sentence after it. A merge
 // tag in it is one piece, spaces and all, though a value filled in still ends the URL at a space.
 const BARE_URL = /https?:\/\/(?:\{\{[^}]*\}\}|[^\s<>"'])*[^\s<>"'.,;:!?)\]]/g

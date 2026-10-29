@@ -35,7 +35,9 @@ Contacts are keyed by your app's user ID (\`externalId\`), so an email change up
 same contact. New contacts start subscribed.
 
 - \`PUT /contacts/{externalId}\` with \`{ "email", "firstName"?, "fields"?: { "plan": "pro" }, "unsubscribed"?: true }\`
-  adds or updates one contact. \`409 email_taken\` if another contact has the email.
+  adds or updates one contact. \`409 email_taken\` if another contact has the email,
+  unless the address only holds an opt-out left when a contact moved or was deleted: the contact
+  then takes it over and stays opted out.
   \`unsubscribed: true\` unsubscribes. Updating a contact never resubscribes it.
 - \`POST /contacts/batch\` with \`{ "contacts": [{ "externalId"?, "email", ... }] }\`, up to
   ${CONTACTS_BATCH_LIMIT.toLocaleString("en-US")}, adds or updates each in order and returns
@@ -49,7 +51,9 @@ same contact. New contacts start subscribed.
 - \`GET /contacts?q=&status=&limit=50&offset=0\` lists contacts with \`total\` and per-status \`counts\`.
   Statuses: subscribed, unsubscribed, bounced, complained.
 - \`POST /contacts/{id}/status\` with \`{ "status": "subscribed" | "unsubscribed" }\` (full permission, by
-  Sendr's contact \`id\`). Resubscribe only people who asked.
+  Sendr's contact \`id\`). Resubscribe only people who asked. SES keeps addresses that bounced or
+  complained on its suppression list, so resubscribing one also needs
+  \`aws sesv2 delete-suppressed-destination --email-address <address>\`.
 
 Example:
 

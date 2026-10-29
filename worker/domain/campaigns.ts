@@ -286,7 +286,9 @@ function toCampaignDto(
     startedAt: row.startedAt?.toISOString() ?? null,
     finishedAt: row.finishedAt?.toISOString() ?? null,
     progressAt: progressAt?.toISOString() ?? null,
-    live: sending || quietFor < REPORTS_WITHIN,
+    // A stalled send stops refreshing too, so a dead queue message doesn't keep an open page
+    // re-reading its deliveries until someone cancels it.
+    live: quietFor < REPORTS_WITHIN,
     stalled: sending && quietFor > STALLED_AFTER,
     counts,
   }

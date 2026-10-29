@@ -94,6 +94,8 @@ function applyUpsert(index: Index, { externalId, ...input }: ContactUpsert): Ups
   const existing = (externalId && index.byExternalId.get(externalId)) || byEmail
   // An opt-out left behind at an address belongs to no one, so a contact moving there takes it
   // over: usually the same person moving back from a typo, who would otherwise be locked out.
+  // Late reports for the old row's emails then find no contact, which is fine: the stricter
+  // status is kept, and SES suppresses an address that bounced or complained itself.
   const left = byEmail && byEmail !== existing && isLeftBehind(byEmail) ? byEmail : undefined
   // Any other address held by another contact stays theirs, even one imported without a user
   // ID: moving a user onto it would break the unique email.
@@ -159,8 +161,17 @@ function leaveAddress(index: Index, contact: ContactRow, now: Date) {
 }
 
 /** A row that only keeps an opt-out at its address, as `leaveAddress` and `deleteContact` leave it. */
+/**
+ * A row `leaveAddress` or `deleteContact` kept only for its opt-out. A contact imported by email
+ * has a name or fields and stays its own contact, even when it's opted out.
+ */
 function isLeftBehind(row: ContactRow) {
-  return !row.externalId && row.status !== "subscribed"
+  return (
+    !row.externalId &&
+    row.status !== "subscribed" &&
+    row.firstName === null &&
+    !Object.keys(row.fields).length
+  )
 }
 
 /** Takes a row out of the call; one already stored is deleted. */

@@ -589,7 +589,15 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "login_code_requests_window_idx": {
+          "name": "login_code_requests_window_idx",
+          "columns": [
+            "window_start"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
