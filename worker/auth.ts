@@ -118,17 +118,23 @@ async function countLoginCode(email: unknown) {
   const now = Date.now()
   const { count, windowStart } = schema.loginCodeRequests
   const expired = sql`${windowStart} <= ${now - HOUR}`
-  const [row] = await db()
-    .insert(schema.loginCodeRequests)
-    .values({ email: email.trim().toLowerCase(), windowStart: new Date(now), count: 1 })
-    .onConflictDoUpdate({
-      target: schema.loginCodeRequests.email,
-      set: {
-        count: sql`case when ${expired} then 1 else ${count} + 1 end`,
-        windowStart: sql`case when ${expired} then ${now} else ${windowStart} end`,
-      },
-    })
-    .returning()
+  const database = db()
+  const [[row]] = await database.batch([
+    database
+      .insert(schema.loginCodeRequests)
+      .values({ email: email.trim().toLowerCase(), windowStart: new Date(now), count: 1 })
+      .onConflictDoUpdate({
+        target: schema.loginCodeRequests.email,
+        set: {
+          count: sql`case when ${expired} then 1 else ${count} + 1 end`,
+          windowStart: sql`case when ${expired} then ${now} else ${windowStart} end`,
+        },
+      })
+      .returning(),
+    // Every address asked for gets a row, so rows whose hour is over go, after the upsert has
+    // restarted this one's. The table then holds only the last hour's addresses.
+    database.delete(schema.loginCodeRequests).where(expired),
+  ])
   if (row.count <= LOGIN_CODES_PER_HOUR) return
   const minutes = Math.ceil((row.windowStart.getTime() + HOUR - now) / 60_000)
   throw new APIError("TOO_MANY_REQUESTS", {
