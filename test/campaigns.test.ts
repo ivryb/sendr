@@ -124,6 +124,13 @@ describe("sending a campaign", () => {
     expect(ann.html).toContain("Example Inc, 1 Main St")
     expect(ann.headers?.["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click")
     expect(ann.headers?.["List-Unsubscribe"]).toMatch(/^<https:\/\/sendr\.test\/u\/.+>$/)
+    // One queue message renders the campaign once, and each email still gets its own link.
+    for (const email of [ann, other]) {
+      const link = email.headers!["List-Unsubscribe"].slice(1, -1)
+      expect(email.html).toContain(`href="${link}"`)
+      expect(email.text).toContain(`Unsubscribe: ${link}`)
+    }
+    expect(ann.headers?.["List-Unsubscribe"]).not.toBe(other.headers?.["List-Unsubscribe"])
   })
 
   it("skips contacts who unsubscribed after the campaign started", async () => {

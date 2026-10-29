@@ -36,8 +36,7 @@ export async function screenshotCampaign(id: string, theme: z.infer<typeof scree
   const campaign = await findCampaign(id)
   const [settings, sender] = await Promise.all([getSettings(), campaignSender(campaign)])
   const from = sender ?? (await defaultSender())
-  const email = renderEmail(campaign, {
-    footer: settings.footer,
+  const email = renderEmail(campaign, settings.footer)({
     recipient: sampleRecipient(),
     unsubscribeUrl: await unsubscribeUrl(settings),
   })

@@ -54,6 +54,7 @@ export async function processSendMessage({ campaignId }: SendMessage) {
     )
     .limit(DELIVERIES_PER_MESSAGE)
 
+  const emailTo = renderEmail(campaign, settings.footer)
   const pace = pacer(provider)
   for (const { delivery, contact } of rows) {
     if (contact?.status !== "subscribed") {
@@ -62,11 +63,7 @@ export async function processSendMessage({ campaignId }: SendMessage) {
     }
     await pace()
     const url = await unsubscribeUrl(settings, contact.id)
-    const email = renderEmail(campaign, {
-      footer: settings.footer,
-      recipient: contact,
-      unsubscribeUrl: url,
-    })
+    const email = emailTo({ recipient: contact, unsubscribeUrl: url })
     const tracked = await trackEmail(email, {
       settings,
       deliveryId: delivery.id,
@@ -106,14 +103,10 @@ export async function sendTestEmail(
   const sender = await campaignSender(campaign)
   if (!sender) throw new CampaignError("not_ready", "Choose who this campaign is from first.")
   const settings = await getSettings()
-  const email = renderEmail(
-    { ...campaign, subject: `[Test] ${campaign.subject}` },
-    {
-      footer: settings.footer,
-      recipient: sampleRecipient(to.name),
-      unsubscribeUrl: await unsubscribeUrl(settings),
-    }
-  )
+  const email = renderEmail({ ...campaign, subject: `[Test] ${campaign.subject}` }, settings.footer)({
+    recipient: sampleRecipient(to.name),
+    unsubscribeUrl: await unsubscribeUrl(settings),
+  })
   await senderProvider(sender).send({ to: to.email, ...email })
 }
 

@@ -45,10 +45,10 @@ export function EmailPreview({
   const debouncedFooter = useDebounced(footer)
   const email = useMemo(
     () =>
-      renderEmail(
-        { subject: debouncedSubject, ...message },
-        { footer: debouncedFooter, recipient: sampleRecipient(me.name), unsubscribeUrl: "#" }
-      ),
+      renderEmail({ subject: debouncedSubject, ...message }, debouncedFooter)({
+        recipient: sampleRecipient(me.name),
+        unsubscribeUrl: "#",
+      }),
     [debouncedSubject, message, debouncedFooter, me.name]
   )
   const [scheme, setScheme] = usePreviewScheme()

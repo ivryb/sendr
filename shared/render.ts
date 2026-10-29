@@ -10,8 +10,8 @@ type CampaignContent = Pick<Campaign, "subject" | "format" | "body">
 /** Whom merge tags greet: a contact, or the stand-in for one in previews and test sends. */
 type Recipient = { firstName: string | null; fields: Record<string, string> }
 
-/** The footer from settings (Markdown), and the recipient and their unsubscribe link. */
-type Delivery = { footer: string; recipient: Recipient; unsubscribeUrl: string }
+/** Whom one email goes to: the recipient, and their unsubscribe link. */
+type Delivery = { recipient: Recipient; unsubscribeUrl: string }
 
 type Parts = { html: string | null; text: string }
 
@@ -22,16 +22,17 @@ type Parts = { html: string | null; text: string }
  */
 export type RenderedEmail = Parts & { subject: string; template: Parts }
 
-/** The footer from settings (Markdown) with the recipient's unsubscribe link. */
-type Footer = { markdown: string; unsubscribeUrl: string }
-
 const marked = new Marked({ gfm: true, breaks: true, async: false })
 
 /** {{first_name}}, {{first_name|there}}, {{fields.plan|free}}: the tag, then its fallback. */
 export const MERGE_TAG =/\{\{\s*([\w.]+)\s*(?:\|([^}]*))?\}\}/g
 
+// Stands in for each recipient's unsubscribe link until the email is addressed. It survives
+// escaping, isn't a merge tag, and no one types private-use characters into a campaign.
+const UNSUBSCRIBE_URL = "\uE000unsubscribe\uE000"
+
 /** Each format's HTML part with the footer, merge tags still in it; a text campaign has none. */
-const HTML_PART: Record<CampaignFormat, (body: string, subject: string, footer: Footer) => string | null> = {
+const HTML_PART: Record<CampaignFormat, (body: string, subject: string, footer: string) => string | null> = {
   editor: (body, subject, footer) =>
     layout(subject, renderNodes(parseDocument(body).children), footerBlock(footer)),
   html: (body, _, footer) => insertFooter(body, footerBlock(footer)),
@@ -39,32 +40,39 @@ const HTML_PART: Record<CampaignFormat, (body: string, subject: string, footer: 
 }
 
 /**
- * Renders a campaign for one recipient. Sending, test sends, screenshots and the admin app's
- * live preview all render through this, so it runs in both the Worker and the browser.
+ * Renders a campaign with the footer from settings (Markdown), and returns what addresses it
+ * to each recipient. Sending, test sends, screenshots and the admin app's live preview all
+ * render through this, so it runs in both the Worker and the browser. The layout is built
+ * once and only merge tags and the unsubscribe link change per recipient, which keeps a queue
+ * message of recipients within Workers Free's 10 ms of CPU.
  */
-export function renderEmail(campaign: CampaignContent, delivery: Delivery): RenderedEmail {
-  const { recipient } = delivery
-  const value = (tag: string) => {
-    if (tag === "first_name") return recipient.firstName?.trim() || null
-    if (tag.startsWith("fields.")) return recipient.fields[tag.slice(7)] || null
-    return null
-  }
-  // The fallback is part of the template, so in HTML it's already escaped; only contact data is.
-  const merge = (template: string, escape: (text: string) => string) =>
-    template.replace(MERGE_TAG, (_, tag: string, fallback = "") => {
-      const filled = value(tag)
-      return filled === null ? fallback.trim() : escape(filled)
-    })
-  const plain = (text: string) => text
-
-  const footer = { markdown: delivery.footer, unsubscribeUrl: delivery.unsubscribeUrl }
+export function renderEmail(campaign: CampaignContent, footer: string) {
   const html = HTML_PART[campaign.format](campaign.body, campaign.subject, footer)
   const text = withFooterText(bodyToText(campaign.format, campaign.body), footer)
-  return {
-    subject: merge(campaign.subject, plain),
-    html: html && merge(html, escapeHtml),
-    text: merge(text, plain),
-    template: { html, text },
+  return ({ recipient, unsubscribeUrl }: Delivery): RenderedEmail => {
+    const value = (tag: string) => {
+      if (tag === "first_name") return recipient.firstName?.trim() || null
+      if (tag.startsWith("fields.")) return recipient.fields[tag.slice(7)] || null
+      return null
+    }
+    // The fallback is part of the template, so in HTML it's already escaped; only contact data is.
+    const merge = (template: string, escape: (text: string) => string) =>
+      template.replace(MERGE_TAG, (_, tag: string, fallback = "") => {
+        const filled = value(tag)
+        return filled === null ? fallback.trim() : escape(filled)
+      })
+    const plain = (part: string) => part
+    // Before merging, so contact data can't fill in an unsubscribe link.
+    const template = {
+      html: html && html.replaceAll(UNSUBSCRIBE_URL, escapeHtml(unsubscribeUrl)),
+      text: text.replaceAll(UNSUBSCRIBE_URL, unsubscribeUrl),
+    }
+    return {
+      subject: merge(campaign.subject, plain),
+      html: template.html && merge(template.html, escapeHtml),
+      text: merge(template.text, plain),
+      template,
+    }
   }
 }
 
@@ -178,14 +186,14 @@ ${footer}
 </html>`
 }
 
-function footerBlock({ markdown, unsubscribeUrl }: Footer) {
+function footerBlock(markdown: string) {
   // marked's own markup, so these plain tags are the ones it wrote.
   const html = markdownToHtml(markdown)
     .replaceAll("<p>", '<p style="margin:0 0 8px;">')
     .replaceAll('<a href="', `<a class="sendr-muted" style="color:${LIGHT.muted};" href="`)
   return `<div class="sendr-muted sendr-border" style="margin-top:40px;padding-top:20px;border-top:1px solid ${LIGHT.border};font-family:${FONT};font-size:13px;line-height:1.5;color:${LIGHT.muted};">
 ${html}
-<p style="margin:0;"><a href="${escapeHtml(unsubscribeUrl)}" class="sendr-muted" style="color:${LIGHT.muted};text-decoration:underline;">Unsubscribe</a></p>
+<p style="margin:0;"><a href="${UNSUBSCRIBE_URL}" class="sendr-muted" style="color:${LIGHT.muted};text-decoration:underline;">Unsubscribe</a></p>
 </div>`
 }
 
@@ -210,8 +218,8 @@ ${footer}
 </html>`
 }
 
-function withFooterText(body: string, { markdown, unsubscribeUrl }: Footer) {
-  return [body, "--", markdown, `Unsubscribe: ${unsubscribeUrl}`]
+function withFooterText(body: string, markdown: string) {
+  return [body, "--", markdown, `Unsubscribe: ${UNSUBSCRIBE_URL}`]
     .filter((part) => part.trim())
     .join("\n\n")
 }

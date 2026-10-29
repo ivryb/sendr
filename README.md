@@ -60,7 +60,7 @@ Sendr runs on Cloudflare's free Workers plan, within daily limits. Workers Paid 
 | 5 million D1 rows read a day | Starting a campaign reads about 4 rows per contact. A campaign's page counts its deliveries on every refresh, so it refreshes less often the bigger the campaign: about 100 to 200 rows a second while it's open. A page left open all day can use up the day's reads. |
 | 100,000 Workers requests a day | Opens, clicks, unsubscribes and SES delivery reports are requests, roughly 2 to 3 per recipient. Past the limit, Cloudflare answers with error 1027 until the reset. |
 | 10,000 Queues operations a day | A queue message sends 15 emails and costs 3 operations: about 50,000 emails a day. |
-| 10 ms of CPU per request | Why `POST /contacts/batch` takes 250 contacts per call. |
+| 10 ms of CPU per request | Why `POST /contacts/batch` takes 250 contacts per call. A queue message renders its campaign once, then only fills in each of its 15 recipients' merge tags, links and unsubscribe link, so a long newsletter fits too. |
 | 10 Browser Run minutes a day | Campaign previews, a few seconds each. |
 | 10 GB of R2 storage | Images, video and audio. R2's free tier is the same on both plans. |
 

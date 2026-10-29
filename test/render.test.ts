@@ -9,14 +9,10 @@ const body = [
 ].join("")
 
 const send = (format: "editor" | "html" | "text", text: string) =>
-  renderEmail(
-    { subject: "October", format, body: text },
-    {
-      footer: "Acme Inc.",
-      recipient: { firstName: "Ann", fields: {} },
-      unsubscribeUrl: "https://example.com/u/1",
-    }
-  )
+  renderEmail({ subject: "October", format, body: text }, "Acme Inc.")({
+    recipient: { firstName: "Ann", fields: {} },
+    unsubscribeUrl: "https://example.com/u/1",
+  })
 
 describe("switching formats", () => {
   it("turns an editor body into an HTML document that sends like the editor campaign", () => {

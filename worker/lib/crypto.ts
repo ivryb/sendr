@@ -51,15 +51,17 @@ export function decodeBase64Url(value: string) {
   return new TextDecoder().decode(Uint8Array.from(binary, (char) => char.charCodeAt(0)))
 }
 
+// A campaign email signs a token per link, so the instance's secret is imported once per isolate.
+const keys = new Map<string, ReturnType<typeof crypto.subtle.importKey>>()
+
 async function signature(secret: string, payload: string) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  )
-  const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(payload))
+  let key = keys.get(secret)
+  if (!key) {
+    const raw = encoder.encode(secret)
+    key = crypto.subtle.importKey("raw", raw, { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
+    keys.set(secret, key)
+  }
+  const mac = await crypto.subtle.sign("HMAC", await key, encoder.encode(payload))
   return toBase64Url(new Uint8Array(mac).slice(0, 16))
 }
 
