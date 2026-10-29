@@ -243,6 +243,23 @@ describe("provider events", () => {
     expect(await contactStatus("bob@example.com")).toBe("complained")
   })
 
+  it("refuses a malformed post with a 400, which SNS doesn't retry", async () => {
+    const post = async (body: string) =>
+      request(`/hooks/ses/${await webhookSecret()}`, { method: "POST", body })
+    expect((await post("not json")).status).toBe(400)
+    expect((await post(JSON.stringify({ Message: "{}" }))).status).toBe(400)
+    expect((await post(JSON.stringify({ Type: "Notification", Message: 42 }))).status).toBe(400)
+  })
+
+  it("ignores a notification whose message isn't an SES event it knows", async () => {
+    for (const message of ["not json", "{}", JSON.stringify({ eventType: "Open", mail: {} })]) {
+      const response = await request(`/hooks/ses/${await webhookSecret()}`, {
+        json: { Type: "Notification", TopicArn: TOPIC_ARN, Message: message },
+      })
+      expect(response.status).toBe(200)
+    }
+  })
+
   it("the contacts API can't resubscribe a bounced contact", async () => {
     await sendCampaign()
     await postSesEvent(permanentBounce(messageIdTo("ann@example.com")))

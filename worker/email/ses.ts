@@ -1,4 +1,5 @@
 import { AwsClient } from "aws4fetch"
+import { z } from "zod"
 
 import {
   PermanentSendError,
@@ -79,19 +80,33 @@ function readMessage(body: string) {
   }
 }
 
-type SesEvent = {
-  eventType?: string
-  mail?: { messageId?: string }
-  bounce?: { bounceType?: string }
+/** What SNS posts to the webhook: a subscription to confirm, or a notification carrying an event. */
+const snsMessage = z.object({
+  Type: z.string(),
+  TopicArn: z.string().optional(),
+  SubscribeURL: z.url().optional(),
+  Message: z.string().optional(),
+})
+
+const sesEvent = z.object({
+  eventType: z.string(),
+  mail: z.object({ messageId: z.string().min(1) }),
+  bounce: z.object({ bounceType: z.string() }).optional(),
+})
+
+/** Reads the body SNS posts, or null when it isn't an SNS message. */
+export function parseSnsMessage(body: string) {
+  return parseJson(body, snsMessage)
 }
 
 /**
- * Reads the SES event in an SNS notification's message. Only permanent bounces count:
- * transient ones are retried by SES itself.
+ * Reads the SES event in an SNS notification's message, or null for one Sendr doesn't act on.
+ * Only permanent bounces count: transient ones are retried by SES itself.
  */
-export function parseSesEvent(event: SesEvent | null): ProviderEvent | null {
-  const providerMessageId = event?.mail?.messageId
-  if (!providerMessageId) return null
+export function parseSesEvent(message: string): ProviderEvent | null {
+  const event = parseJson(message, sesEvent)
+  if (!event) return null
+  const providerMessageId = event.mail.messageId
   switch (event.eventType) {
     case "Delivery":
       return { type: "delivered", providerMessageId }
@@ -101,5 +116,13 @@ export function parseSesEvent(event: SesEvent | null): ProviderEvent | null {
       return { type: "complained", providerMessageId }
     default:
       return null
+  }
+}
+
+function parseJson<T extends z.ZodType>(text: string, schema: T): z.infer<T> | null {
+  try {
+    return schema.safeParse(JSON.parse(text)).data ?? null
+  } catch {
+    return null
   }
 }

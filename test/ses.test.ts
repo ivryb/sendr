@@ -117,7 +117,7 @@ describe("SES events", () => {
       { eventType: "Complaint", mail: { messageId: "d" } },
       { eventType: "Open", mail: { messageId: "e" } },
     ]
-    expect(events.map(parseSesEvent)).toEqual([
+    expect(events.map((event) => parseSesEvent(JSON.stringify(event)))).toEqual([
       { type: "delivered", providerMessageId: "a" },
       { type: "bounced", providerMessageId: "b" },
       null,
