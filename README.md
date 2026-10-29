@@ -2,8 +2,6 @@
 
 Cloudflare-native marketing emails. Write a newsletter or product update with images and video, send it to your users through Amazon SES, and keep everything (contacts, unsubscribes, stats) in your own Cloudflare account.
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/ivryb/sendr)
-
 - **Costs almost nothing to run.** Sendr is one Cloudflare Worker with a D1 database, a queue and an R2 bucket. SES charges about $0.10 per 1,000 emails.
 - **Emails that look right.** Write in the editor, with images, GIFs, and video and audio cards, or bring your own HTML or plain text. The preview shows light and dark mode, and agents get the same as a PNG to show you before sending.
 - **Safe sending.** Every campaign goes to a small first batch, then pauses so you can check bounces and spam complaints before sending to everyone else.
@@ -27,23 +25,30 @@ The guide there has the agent explain Sendr, check it can reach your Cloudflare 
 
 ### By hand
 
-1. Click **Deploy to Cloudflare** above. Cloudflare copies this repo into your GitHub account, creates the D1 database, queue and R2 bucket, and asks for `ADMIN_EMAIL`: your email. You sign in with it; nobody else can.
-2. Add a custom domain to the Worker (Workers & Pages > sendr > Settings > Domains & Routes), for example `emails.example.com`. Unsubscribe links use it, so pick one you'll keep. Sign in on this domain, not on `workers.dev`: passkeys only work on the domain they were created on, and the first sign-in saves it as the address for unsubscribe links.
-3. Open the domain and sign in with your email. Until Sendr can send email itself, sendr.soy delivers your login code (see [Login codes](#login-codes)). Add a passkey when asked.
-4. Add a sender in **Senders** (below), then create an API key on the **API** page and push your contacts.
+Your Cloudflare account needs R2 turned on first: open R2 in the dashboard and enable it (the first 10 GB are free). Campaign previews use Browser Run, which needs no setup; the Workers Free plan allows 10 browser-minutes a day.
 
-Your Cloudflare account needs R2 turned on before the first deploy: open R2 in the dashboard and enable it (the first 10 GB are free). Campaign previews use Browser Run, which needs no setup; the Workers Free plan allows 10 browser-minutes a day.
+1. Clone the repo and deploy it on a domain you'll keep, for example `emails.example.com`; unsubscribe links use it. `ADMIN_EMAIL` is your email. You sign in with it; nobody else can.
 
-To deploy from a terminal instead, clone the repo and run:
+   ```sh
+   git clone https://github.com/ivryb/sendr.git && cd sendr
+   bun install
+   bunx wrangler queues create sendr-send
+   bunx react-router build && bunx wrangler deploy --domain emails.example.com && bunx wrangler d1 migrations apply DB --remote
+   bunx wrangler secret put ADMIN_EMAIL
+   ```
+
+   The first deploy creates the D1 database and the R2 bucket.
+
+2. Open the domain and sign in with your email. Sign in on this domain, not on `workers.dev`: passkeys only work on the domain they were created on, and the first sign-in saves it as the address for unsubscribe links. Until Sendr can send email itself, sendr.soy delivers your login code (see [Login codes](#login-codes)). Add a passkey when asked.
+3. Add a sender in **Senders** (below), then create an API key on the **API** page and push your contacts.
+
+### Update
+
+Ask your agent to update Sendr, or run this in your checkout. The domain stays attached, so the deploy needs no flags:
 
 ```sh
-bun install
-bunx wrangler queues create sendr-send
-bunx react-router build && bunx wrangler deploy --domain emails.example.com && bunx wrangler d1 migrations apply DB --remote
-bunx wrangler secret put ADMIN_EMAIL
+git pull && bun install && bun run deploy
 ```
-
-The first deploy creates the D1 database and the R2 bucket. The domain stays attached, so later deploys are `bun run deploy`.
 
 ## Add a sender
 
