@@ -22,6 +22,10 @@ export const media = new Hono().get("/:id/:name", async (c) => {
     "cache-control": "public, max-age=31536000, immutable",
   })
   object.writeHttpMetadata(headers)
+  // Media shares the admin app's origin: opened directly, a file must never run as a page there.
+  // Neither header changes how it shows in an <img>, <video> or <audio>.
+  headers.set("x-content-type-options", "nosniff")
+  headers.set("content-security-policy", "sandbox")
   // A matching If-None-Match: the caller's copy is current.
   if (!("body" in object)) return new Response(null, { status: 304, headers })
   const range = rangeHeader ? object.range : undefined

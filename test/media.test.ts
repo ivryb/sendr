@@ -62,6 +62,20 @@ describe("media", () => {
     expect((await upload("name=logo.svg", "image/svg+xml")).status).toBe(415)
   })
 
+  it("a content type smuggling a second type is rejected", async () => {
+    expect((await upload("name=page.mp4", "video/mp4,text/html")).status).toBe(415)
+    expect((await upload("name=logo.png", "image/png,image/svg+xml")).status).toBe(415)
+    expect((await upload("name=page.png", "image/png html")).status).toBe(415)
+  })
+
+  it("media can't run as a page on the instance's origin", async () => {
+    const image = await uploaded("name=hero.png", "image/png; charset=binary")
+    const served = await request(pathOf(image.url))
+    expect(served.headers.get("content-type")).toBe("image/png")
+    expect(served.headers.get("x-content-type-options")).toBe("nosniff")
+    expect(served.headers.get("content-security-policy")).toBe("sandbox")
+  })
+
   it("a video can reference an uploaded poster", async () => {
     const poster = await uploaded("name=poster.jpg", "image/jpeg")
     const video = await uploaded(`name=demo.mp4&poster=${poster.id}&duration=134`, "video/mp4")

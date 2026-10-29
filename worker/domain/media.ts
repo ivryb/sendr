@@ -32,8 +32,9 @@ export async function uploadMedia(upload: Upload, baseUrl: string): Promise<Medi
   }
   if (upload.size > MAX_BYTES) throw new DomainError("too_large", 413, "Files can be up to 100 MB.")
   const contentType = upload.contentType.split(";")[0].trim().toLowerCase()
-  const kind = MEDIA_KINDS.find((kind) => contentType.startsWith(`${kind}/`))
-  // SVG can carry scripts, and it's served from the admin app's origin; email clients rarely show it anyway.
+  // One plain type only: R2 serves back the whole string, and Chrome reads "video/mp4,text/html"
+  // as its last type. SVG can carry scripts, and email clients rarely show it anyway.
+  const kind = MEDIA_KINDS.find((kind) => new RegExp(`^${kind}/[a-z0-9.+-]+$`).test(contentType))
   if (!kind || contentType === "image/svg+xml") {
     throw new DomainError("unsupported_type", 415, "Upload an image, a video or an audio file (not SVG).")
   }
