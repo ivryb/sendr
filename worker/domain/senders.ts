@@ -86,6 +86,8 @@ export async function checkSender(id: string) {
       ses.domain(domain),
       ses.account(),
       eventsConnected(),
+      // Senders connected before Sendr set this get it here, at the latest when a campaign starts.
+      ses.suppressReported(),
     ])
     const status = {
       verified: identity.verified,

@@ -62,6 +62,22 @@ describe("connecting a sender", () => {
     ])
   })
 
+  it("has SES suppress addresses that bounced or complained, for senders connected before too", async () => {
+    const suppression = () =>
+      fakeAws.requests
+        .filter(({ url }) => url.endsWith("/v2/email/configuration-sets/sendr/suppression-options"))
+        .map(({ method, body }) => ({ method, body: JSON.parse(body) }))
+    const expected = { method: "PUT", body: { SuppressedReasons: ["BOUNCE", "COMPLAINT"] } }
+
+    const sender = await addSender(admin)
+    expect(suppression()).toContainEqual(expected)
+
+    // A sender connected before Sendr set this gets it on its next check, as a campaign starts.
+    fakeAws.requests = []
+    expect(await check(sender.id)).toMatchObject({ ok: true })
+    expect(suppression()).toEqual([expected])
+  })
+
   it("explains a key AWS rejects, and saves nothing", async () => {
     fakeAws.rejectKey = true
     const response = await request("/api/v1/senders", { cookie: admin, json: SENDER })

@@ -65,6 +65,19 @@ export function sesAccount(
     return xmlValue(reply, "SubscriptionArn")?.startsWith("arn:") ?? false
   }
 
+  /**
+   * Has SES itself skip addresses that bounced or complained after an email from the `sendr`
+   * configuration set. Sendr's own record of them comes through SNS, which retries a report
+   * for an hour at most (AWS's limit), so a report lost while a Workers Free daily limit is out
+   * would let the next campaign mail them. SES instead drops that email and reports a bounce,
+   * which Sendr records. Only Sendr's sends change: the account's own settings stay.
+   */
+  async function suppressReported() {
+    await ses(`/configuration-sets/${CONFIGURATION_SET}/suppression-options`, "PUT", {
+      SuppressedReasons: ["BOUNCE", "COMPLAINT"],
+    })
+  }
+
   /** Creating something that already exists is fine: setup can run again for another sender. */
   const allowExisting = (error: unknown) => {
     if (!(error instanceof AwsError && error.code === "AlreadyExistsException")) throw error
@@ -86,6 +99,7 @@ export function sesAccount(
     },
 
     subscribe,
+    suppressReported,
 
     /**
      * Publishes delivery, bounce and complaint events from the `sendr` configuration set to an
@@ -98,6 +112,7 @@ export function sesAccount(
       await ses("/configuration-sets", "POST", { ConfigurationSetName: CONFIGURATION_SET }).catch(
         allowExisting
       )
+      await suppressReported()
       const destination = {
         Enabled: true,
         MatchingEventTypes: ["DELIVERY", "BOUNCE", "COMPLAINT"],
