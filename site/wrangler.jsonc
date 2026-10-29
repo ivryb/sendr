@@ -7,10 +7,12 @@
   "compatibility_date": "2026-10-01",
   "routes": [{ "pattern": "sendr.soy", "custom_domain": true }],
   "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["hello@sendr.soy"] }],
-  // Limits are per Cloudflare location. They cap how much a misused endpoint can send.
+  // Limits are per Cloudflare location. They cap how much a misused endpoint can send in a burst.
   "ratelimits": [
     { "name": "PER_RECIPIENT", "namespace_id": "7301", "simple": { "limit": 3, "period": 60 } },
     { "name": "OVERALL", "namespace_id": "7302", "simple": { "limit": 20, "period": 60 } }
   ],
+  // Today's sends per inbox and overall, for the daily caps. Wrangler creates it on first deploy.
+  "kv_namespaces": [{ "binding": "SENT_TODAY" }],
   "observability": { "enabled": true }
 }
