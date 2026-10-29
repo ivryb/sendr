@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { createRequestHandler } from "react-router"
 import { HTTPException } from "hono/http-exception"
+import { DrizzleQueryError } from "drizzle-orm/errors"
 
 import { createAuth, isClaimed } from "./auth"
 import type { SendMessage } from "./domain/campaigns"
@@ -28,7 +29,9 @@ const app = new Hono<{ Bindings: Env }>()
     if (error instanceof DomainError) {
       return c.json({ error: error.code, message: error.message }, error.status)
     }
-    console.error(error)
+    // Drizzle's message lists the query's values, which can be secrets like a sender's AWS key.
+    if (error instanceof DrizzleQueryError) console.error(`Failed query: ${error.query}`, error.cause)
+    else console.error(error)
     return c.json({ error: "internal_error" }, 500)
   })
 

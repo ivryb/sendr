@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { env } from "cloudflare:test"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { DnsRecord, Sender } from "../shared/model"
 import { fakeAws, TOPIC_ARN } from "./fake-aws"
@@ -75,6 +76,18 @@ describe("connecting a sender", () => {
   it("isn't open to signed-out visitors", async () => {
     const response = await request("/api/v1/senders", { json: SENDER })
     expect(response.status).toBe(401)
+  })
+
+  it("a failed save logs why, without the AWS secret key", async () => {
+    await env.DB.exec("CREATE TRIGGER refuse BEFORE INSERT ON senders BEGIN SELECT RAISE(ABORT, 'disk full'); END")
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+    const response = await request("/api/v1/senders", { cookie: admin, json: SENDER })
+    expect(response.status).toBe(500)
+
+    const output = logged.mock.calls.flat().map((part) => (part instanceof Error ? part.stack : String(part)))
+    logged.mockRestore()
+    expect(output.join("\n")).not.toContain(SENDER.secretAccessKey)
+    expect(output.join("\n")).toContain("disk full")
   })
 })
 
