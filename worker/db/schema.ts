@@ -18,6 +18,7 @@ import {
   DELIVERY_STATUSES,
   EMAIL_STATUSES,
   MEDIA_KINDS,
+  SENDER_PROVIDERS,
 } from "../../shared/model"
 
 export * from "./authSchema"
@@ -62,7 +63,7 @@ export const senders = sqliteTable("senders", {
   name: text("name").notNull().default(""),
   email: text("email").notNull(),
   replyTo: text("reply_to").notNull().default(""),
-  provider: text("provider", { enum: ["ses"] }).notNull().default("ses"),
+  provider: text("provider", { enum: SENDER_PROVIDERS }).notNull().default("ses"),
   region: text("region").notNull(),
   accessKeyId: text("access_key_id").notNull(),
   secretAccessKey: text("secret_access_key").notNull(),

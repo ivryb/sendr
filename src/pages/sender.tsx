@@ -8,7 +8,7 @@ import {
   ExternalLinkIcon,
   RefreshCwIcon,
 } from "lucide-react"
-import { data, useNavigate, useNavigation, useRevalidator } from "react-router"
+import { useNavigate, useNavigation, useRevalidator } from "react-router"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -35,20 +35,16 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
+import { orNotFound } from "@/lib/admin.server"
 import { api, ApiError } from "@/lib/api"
 import { formatNumber } from "@/lib/format"
 import { useChange } from "@/lib/mutations"
 import { usePolling } from "@/lib/use-polling"
 import type { DnsRecord, Sender } from "../../shared/model"
-import { checkSender, SenderError } from "../../worker/domain/senders"
+import { checkSender } from "../../worker/domain/senders"
 
 export async function loader({ params }: Route.LoaderArgs) {
-  return checkSender(params.id).catch((error) => {
-    if (error instanceof SenderError && error.code === "not_found") {
-      throw data(null, { status: 404 })
-    }
-    throw error
-  })
+  return orNotFound(checkSender(params.id))
 }
 
 export default function SenderPage({ loaderData }: Route.ComponentProps) {

@@ -1,11 +1,10 @@
-import { data } from "react-router"
-
 import type { Route } from "./+types/campaign"
+import { orNotFound } from "@/lib/admin.server"
 import { refreshInterval } from "@/lib/campaign"
 import { usePolling } from "@/lib/use-polling"
 import { CampaignDetail } from "@/pages/campaign-detail"
 import { CampaignEditor } from "@/pages/campaign-editor"
-import { CampaignError, getCampaign } from "../../worker/domain/campaigns"
+import { getCampaign } from "../../worker/domain/campaigns"
 import { contactCounts } from "../../worker/domain/contacts"
 import { listSenders } from "../../worker/domain/senders"
 import { campaignLinks } from "../../worker/domain/tracking"
@@ -13,12 +12,7 @@ import { getSettings } from "../../worker/lib/settings"
 
 export async function loader({ params }: Route.LoaderArgs) {
   const [campaign, links, settings, senders, counts] = await Promise.all([
-    getCampaign(params.id).catch((error) => {
-      if (error instanceof CampaignError && error.code === "not_found") {
-        throw data(null, { status: 404 })
-      }
-      throw error
-    }),
+    orNotFound(getCampaign(params.id)),
     campaignLinks(params.id),
     getSettings(),
     listSenders(),

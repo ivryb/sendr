@@ -15,7 +15,7 @@ export const SENDER_SERVICES: Record<Sender["provider"], string> = {
 }
 
 /** Ready once the domain is verified and the account can email anyone. */
-export function senderStatus(sender: Pick<Sender, "verified" | "production">) {
+function senderStatus(sender: Pick<Sender, "verified" | "production">) {
   if (!sender.verified) return { label: "Waiting for DNS", dot: "bg-amber-500" }
   if (!sender.production) return { label: "Sandbox", dot: "bg-amber-500" }
   return { label: "Ready", dot: "bg-emerald-500" }

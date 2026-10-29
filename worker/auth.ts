@@ -50,8 +50,6 @@ export function createAuth(settings: InstanceSettings, requestUrl: string) {
   })
 }
 
-export type Auth = ReturnType<typeof createAuth>
-
 export type Admin = { id: string; email: string; name: string }
 
 /** The admin signed in on `request`, or null. */

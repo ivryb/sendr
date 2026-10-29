@@ -83,7 +83,7 @@ export function bodyToText(format: CampaignFormat, body: string) {
  * without the campaign footer or unsubscribe link.
  */
 export function renderMessage(input: { subject: string; markdown: string }) {
-  const nodes = parseDocument(marked.parse(input.markdown) as string).children
+  const nodes = parseDocument(markdownToHtml(input.markdown)).children
   return { subject: input.subject, html: layout(input.subject, renderNodes(nodes)), text: input.markdown }
 }
 

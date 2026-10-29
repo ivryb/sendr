@@ -23,7 +23,7 @@ export const senderChanges = senderInput.pick({ name: true, replyTo: true }).par
 const SENDER_ERROR_STATUS = { not_found: 404, invalid: 400 } as const
 
 /** Something the admin can fix, like a key without the right permissions. */
-export class SenderError extends DomainError {
+class SenderError extends DomainError {
   declare readonly code: keyof typeof SENDER_ERROR_STATUS
   constructor(code: keyof typeof SENDER_ERROR_STATUS, message: string) {
     super(code, SENDER_ERROR_STATUS[code], message)
@@ -132,7 +132,7 @@ export async function deleteSender(id: string) {
   await db().delete(senders).where(eq(senders.id, id))
 }
 
-export async function findSender(id: string) {
+async function findSender(id: string) {
   const row = await db().query.senders.findFirst({ where: eq(senders.id, id) })
   if (!row) throw new SenderError("not_found", "Sender not found.")
   return row

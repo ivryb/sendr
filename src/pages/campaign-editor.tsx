@@ -48,7 +48,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { api, ApiError } from "@/lib/api"
 import { formatNumber, plural } from "@/lib/format"
 import { useChange } from "@/lib/mutations"
-import type { Campaign, Sender } from "../../shared/model"
+import { FIRST_BATCH_MAX, SUBJECT_MAX, type Campaign, type Sender } from "../../shared/model"
 
 type Draft = Pick<
   Campaign,
@@ -109,7 +109,7 @@ export function CampaignEditor({
           rows={1}
           placeholder="Subject"
           aria-label="Subject"
-          maxLength={998}
+          maxLength={SUBJECT_MAX}
           autoFocus={!campaign.subject}
           className="field-sizing-content w-full resize-none bg-transparent text-2xl font-semibold tracking-tight text-balance outline-none placeholder:text-muted-foreground/50 sm:text-3xl"
         />
@@ -365,7 +365,7 @@ function FirstBatchField({
         type="number"
         inputMode="numeric"
         min={1}
-        max={100_000}
+        max={FIRST_BATCH_MAX}
         value={text}
         onChange={(event) => {
           setText(event.target.value)
@@ -383,7 +383,7 @@ function FirstBatchField({
 }
 
 function isBatchSize(value: number) {
-  return Number.isInteger(value) && value >= 1 && value <= 100_000
+  return Number.isInteger(value) && value >= 1 && value <= FIRST_BATCH_MAX
 }
 
 function SendTestButton({

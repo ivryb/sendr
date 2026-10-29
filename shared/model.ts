@@ -51,6 +51,12 @@ export type Email = {
 export const CAMPAIGN_FORMATS = ["editor", "html", "text"] as const
 export type CampaignFormat = (typeof CAMPAIGN_FORMATS)[number]
 
+/** The longest subject: RFC 5322 caps a header line at 998 characters. */
+export const SUBJECT_MAX = 998
+
+/** The most contacts a campaign's first batch can hold before it waits for approval. */
+export const FIRST_BATCH_MAX = 100_000
+
 export type CampaignAction = "start" | "approve" | "cancel"
 
 /** Actions the operator can take from each campaign status. */

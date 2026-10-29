@@ -7,6 +7,8 @@ import {
   CAMPAIGN_FORMATS,
   CAMPAIGN_STATUSES,
   DELIVERY_STATUSES,
+  FIRST_BATCH_MAX,
+  SUBJECT_MAX,
   type Campaign,
   type CampaignAction,
   type CampaignCounts,
@@ -22,12 +24,12 @@ import { checkSender, defaultSender } from "./senders"
 export const campaignInput = z
   .object({
     senderId: z.string().nullable().optional(),
-    subject: z.string().max(998).optional(),
+    subject: z.string().max(SUBJECT_MAX).optional(),
     format: z.enum(CAMPAIGN_FORMATS).optional(),
     body: z.string().optional(),
     // Agents write Markdown well, so it's accepted and stored as an editor body.
     markdown: z.string().optional(),
-    firstBatchSize: z.number().int().min(1).max(100_000).optional(),
+    firstBatchSize: z.number().int().min(1).max(FIRST_BATCH_MAX).optional(),
   })
   .refine((input) => input.markdown === undefined || input.body === undefined, {
     message: "Send the message as `body` or `markdown`, not both.",
@@ -93,11 +95,11 @@ export async function startCampaign(id: string, settings: InstanceSettings) {
     !campaign.senderId && "a sender",
     !settings.publicUrl && "a public URL in Settings",
   ].filter(Boolean)
-  if (missing.length) {
+  if (missing.length || !campaign.senderId) {
     throw new CampaignError("not_ready", `Add ${missing.join(", ")} before sending.`)
   }
   // Checked live: an unverified address would make every email in the campaign fail.
-  const check = await checkSender(campaign.senderId!)
+  const check = await checkSender(campaign.senderId)
   if (!check.ok || !check.sender.verified) {
     throw new CampaignError(
       "not_ready",

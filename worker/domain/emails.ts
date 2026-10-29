@@ -1,7 +1,7 @@
 import { and, eq, inArray, or } from "drizzle-orm"
 import { z } from "zod"
 
-import type { Email } from "../../shared/model"
+import { SUBJECT_MAX, type Email } from "../../shared/model"
 import { renderMessage } from "../../shared/render"
 import { db } from "../db/client"
 import { contacts, emails, senders } from "../db/schema"
@@ -9,22 +9,29 @@ import { PermanentSendError } from "../email/provider"
 import { senderProvider } from "../email/providers"
 import { DomainError } from "../lib/errors"
 
+const message = z.union(
+  [
+    // Listed first, so `html` wins when both are sent.
+    z.object({
+      html: z.string().min(1),
+      /** Plain-text version of `html`. */
+      text: z.string().optional(),
+    }),
+    // Laid out like a campaign, and sent as the text part too.
+    z.object({ markdown: z.string().min(1) }),
+  ],
+  { error: "Add the message as `markdown` or `html`." }
+)
+
 export const emailInput = z
   .object({
     /** A sender's ID or address. */
     from: z.string().trim().min(1),
     to: z.email().transform((email) => email.trim().toLowerCase()),
-    subject: z.string().trim().min(1).max(998),
-    markdown: z.string().optional(),
-    html: z.string().optional(),
-    /** Plain-text version for `html`; Sendr uses `markdown` as text when given. */
-    text: z.string().optional(),
+    subject: z.string().trim().min(1).max(SUBJECT_MAX),
     replyTo: z.email().optional(),
   })
-  .refine((input) => input.markdown || input.html, {
-    message: "Add the message as `markdown` or `html`.",
-    path: ["markdown"],
-  })
+  .and(message)
 
 /**
  * Sends one email right away, outside any campaign: no footer, no unsubscribe link. Addresses
@@ -43,9 +50,10 @@ export async function sendSingleEmail(input: z.infer<typeof emailInput>) {
     throw new DomainError("suppressed", 422, `${input.to} bounced or reported spam before, so Sendr won't email it.`)
   }
 
-  const content = input.html
-    ? { subject: input.subject, html: input.html, text: input.text ?? "" }
-    : renderMessage({ subject: input.subject, markdown: input.markdown! })
+  const content =
+    "html" in input
+      ? { subject: input.subject, html: input.html, text: input.text ?? "" }
+      : renderMessage({ subject: input.subject, markdown: input.markdown })
   const [row] = await db()
     .insert(emails)
     .values({ senderId: sender.id, to: input.to, subject: input.subject, status: "sent" })

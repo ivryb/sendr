@@ -1,6 +1,7 @@
-import { createContext, redirect, type MiddlewareFunction } from "react-router"
+import { createContext, data, redirect, type MiddlewareFunction } from "react-router"
 
 import { getAdmin, type Admin } from "../../worker/auth"
+import { DomainError } from "../../worker/lib/errors"
 
 export const adminContext = createContext<Admin>()
 
@@ -17,4 +18,12 @@ export const requireAdmin: MiddlewareFunction<Response> = async ({
     )
   }
   context.set(adminContext, admin)
+}
+
+/** For loaders: a record the domain can't find shows the 404 page instead of an error. */
+export function orNotFound<T>(load: Promise<T>) {
+  return load.catch((error: unknown) => {
+    if (error instanceof DomainError && error.status === 404) throw data(null, { status: 404 })
+    throw error
+  })
 }
