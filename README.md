@@ -50,6 +50,24 @@ Ask your agent to update Sendr, or run this in your checkout. The domain stays a
 git pull && bun install && bun run deploy
 ```
 
+### Workers Free or Paid
+
+Sendr runs on Cloudflare's free Workers plan, within daily limits. Workers Paid ($5 a month per account) lifts them, and its included monthly amounts cover millions of emails. Upgrading needs no redeploy. On Workers Free, these limits matter:
+
+| Workers Free | What it means for Sendr |
+| --- | --- |
+| 100,000 D1 rows written a day | About 12,000 campaign recipients a day. Each costs about 8 rows: 4 when the campaign starts, 2 when it's sent, 1 for its delivery report and 1 for its first open. Importing a new contact costs 5. A list over about 25,000 needs Workers Paid, since starting a campaign writes its 4 rows per recipient at once. |
+| 5 million D1 rows read a day | Starting a campaign reads about 4 rows per contact. A campaign's page counts its deliveries on every refresh, so it refreshes less often the bigger the campaign: about 100 to 200 rows a second while it's open. A page left open all day can use up the day's reads. |
+| 100,000 Workers requests a day | Opens, clicks, unsubscribes and SES delivery reports are requests, roughly 2 to 3 per recipient. Past the limit, Cloudflare answers with error 1027 until the reset. |
+| 10,000 Queues operations a day | A queue message sends 15 emails and costs 3 operations: about 50,000 emails a day. |
+| 10 ms of CPU per request | Why `POST /contacts/batch` takes 250 contacts per call. |
+| 10 Browser Run minutes a day | Campaign previews, a few seconds each. |
+| 10 GB of R2 storage | Images, video and audio. R2's free tier is the same on both plans. |
+
+When a daily D1 limit runs out, every database query fails until 00:00 UTC. A campaign that's sending pauses and picks up by itself a few minutes after the reset; at most the one email in flight when the limit hit goes out twice. Until then the admin app and the API (`503 cloudflare_limit`) say which limit it was and when it resets.
+
+The limits are from Cloudflare's [Workers](https://developers.cloudflare.com/workers/platform/limits/), [D1](https://developers.cloudflare.com/d1/platform/pricing/), [Queues](https://developers.cloudflare.com/queues/platform/pricing/), [Browser Run](https://developers.cloudflare.com/browser-rendering/platform/limits/) and [R2](https://developers.cloudflare.com/r2/pricing/) pages, as of October 2026. The rows per recipient and per contact are measured on Sendr's own queries with D1's `rows_written` and `rows_read`; the requests per recipient are an estimate.
+
 ## Add a sender
 
 A sender is an address your campaigns come from, like `news@acme.com`, and the email service that sends for it. Amazon SES is the only service so far; it costs about $0.10 per 1,000 emails.
@@ -91,7 +109,7 @@ curl -X PUT https://emails.example.com/api/v1/contacts/user_123 \
   -H "Authorization: Bearer sk_..." -H "Content-Type: application/json" \
   -d '{ "email": "ann@example.com", "firstName": "Ann", "fields": { "plan": "pro" } }'
 
-# Add or update up to 1,000 contacts per call
+# Add or update up to 250 contacts per call
 curl -X POST https://emails.example.com/api/v1/contacts/batch \
   -H "Authorization: Bearer sk_..." -H "Content-Type: application/json" \
   -d '{ "contacts": [{ "externalId": "user_123", "email": "ann@example.com" }] }'

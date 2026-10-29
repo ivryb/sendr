@@ -13,7 +13,10 @@ Base URL: ${api}
 Auth: \`Authorization: Bearer <api key>\`. The admin creates keys in Sendr under API. Any other
 \`Authorization\` scheme gets \`401\`.
 Bodies and responses are JSON. Errors look like \`{ "error": "code", "message": "readable reason" }\`;
-validation errors add \`issues\` with the field paths.
+validation errors add \`issues\` with the field paths. \`503 cloudflare_limit\` means the Cloudflare
+account is on Workers Free and used up a daily D1 limit: every call fails until it resets at 00:00 UTC,
+and \`message\` says which limit. Sending campaigns resume on their own after the reset; Workers Paid
+($5 a month) lifts the limits.
 
 ## Permissions
 
@@ -109,7 +112,8 @@ can check bounces and complaints. Approve only if fewer than about 5% bounced an
 Statuses: draft, first_batch, awaiting_approval, sending, sent, cancelled.
 
 - \`GET /campaigns\`, \`GET /campaigns/{id}\` (with delivery \`counts\`). \`GET /campaigns/{id}\`
-  also returns \`links\`: \`[{ "url", "clicks" }]\`, most clicked first.
+  also returns \`links\`: \`[{ "url", "clicks" }]\`, most clicked first. While a campaign sends,
+  \`progressAt\` is when it last moved on; if it's more than a few minutes old, sending has stalled.
 - \`POST /campaigns\` with \`{ "subject"?, "format"?, "body"?, "senderId"?, "firstBatchSize"? }\` (or
   \`markdown\` instead of \`format\` and \`body\`) creates a draft. Without \`senderId\` it uses the first
   verified sender, or the first sender while none is.
@@ -121,7 +125,8 @@ Statuses: draft, first_batch, awaiting_approval, sending, sent, cancelled.
   (on the Workers Free plan, a new browser every 20 seconds and 10 browser-minutes a day), so retry later.
 - \`POST /campaigns/{id}/test\` with \`{ "to": "you@example.com" }\` sends one test copy. \`to\` is
   required with an API key.
-- \`POST /campaigns/{id}/start\`, \`/approve\`, \`/cancel\`.
+- \`POST /campaigns/{id}/start\`, \`/approve\`, \`/cancel\`. Start refuses with \`400 not_ready\` when the
+  sender isn't ready, or when the list is bigger than what's left of the SES account's 24-hour quota.
 
 The footer under every campaign (with the sender's postal address) is \`footer\` in settings.
 

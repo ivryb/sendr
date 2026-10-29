@@ -41,6 +41,9 @@ Ask the user for:
 - The From name and address, like `Acme <news@acme.com>`, and an AWS region near their users (`us-east-1` if they don't mind).
 - Their company name and postal address for the footer. Anti-spam laws require an address.
 - Where to keep the Sendr checkout. Updates deploy from it.
+- Whether their Cloudflare account has Workers Paid, the $5 a month plan. Wrangler can't show the plan, so ask. They can see it on the Workers plans page in the Cloudflare dashboard.
+
+If the account is on Workers Free, or they aren't sure, tell them what Free allows, in plain words: "Workers Free sends about 12,000 campaign emails a day. A bigger list pauses at the limit and carries on after midnight UTC, and a list over about 25,000 can't start. Bigger lists need Workers Paid, $5 a month, which you can turn on at any time." The README's "Workers Free or Paid" section in the checkout has the details.
 
 Done when `bunx wrangler whoami` and `aws sts get-caller-identity` both succeed and you have every answer.
 
@@ -134,9 +137,10 @@ Starting a campaign emails real people, and approving it emails everyone. Before
 Look at it yourself, then show it to the user: embed it in your reply if your interface renders images (`![Preview](/tmp/sendr-preview.png)`), or open it for them with `open` (macOS) or `xdg-open` (Linux).
 
 - Update Sendr: `cd "$SENDR_CHECKOUT" && git pull && bun install && bun run deploy`.
-- Import a list from another tool, such as a CSV export: read it yourself and send `POST /contacts/batch` calls of up to 1,000 contacts, each with `email` and no `externalId`. Give everyone the old tool lists as unsubscribed, bounced or complained `"unsubscribed": true`.
+- Import a list from another tool, such as a CSV export: read it yourself and send `POST /contacts/batch` calls of up to 250 contacts, each with `email` and no `externalId`. Give everyone the old tool lists as unsubscribed, bounced or complained `"unsubscribed": true`.
 - A key for the user's app: `bun run api-key "$SENDR_URL" --name "<app> backend" --permissions contacts,emails` in the checkout prints one.
 - SES production access, including what to do after a denial: `$SENDR_CHECKOUT/docs/ses-production-access.md`.
+- A `503` with `"error": "cloudflare_limit"` means the Cloudflare account is on Workers Free and used up a daily limit. Every call fails until 00:00 UTC, and sending campaigns resume on their own after that. Tell the user which limit its `message` names and when it resets, and that Workers Paid ($5 a month) lifts it. Don't retry before the reset.
 ```
 
 Done when the file is saved.
