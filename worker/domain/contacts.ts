@@ -1,4 +1,4 @@
-import { and, desc, eq, getTableColumns, inArray, like, or, sql, type SQL } from "drizzle-orm"
+import { and, desc, eq, getTableColumns, inArray, like, ne, or, sql, type SQL } from "drizzle-orm"
 import type { BatchItem } from "drizzle-orm/batch"
 import { z } from "zod"
 
@@ -89,9 +89,10 @@ function applyUpsert(index: Index, { externalId, ...input }: ContactUpsert): Ups
     (byEmail !== existing || (externalId && byEmail.externalId && byEmail.externalId !== externalId))
   if (taken) return { ok: false, error: "email_taken" }
 
+  const moves = existing && existing.email !== input.email
   // A bounce belongs to the address, so a corrected email can get mail again. Unsubscribes and
   // complaints belong to the person and stay.
-  const newAddress = existing?.status === "bounced" && existing.email !== input.email
+  const newAddress = moves && existing.status === "bounced"
   const status: ContactStatus | undefined =
     input.unsubscribed && (!existing || existing.status === "subscribed" || newAddress)
       ? "unsubscribed"
@@ -100,18 +101,8 @@ function applyUpsert(index: Index, { externalId, ...input }: ContactUpsert): Ups
         : undefined
 
   const now = new Date()
-  const row: ContactRow = existing ?? {
-    id: crypto.randomUUID(),
-    externalId: null,
-    email: input.email,
-    firstName: null,
-    fields: {},
-    status: "subscribed",
-    statusChangedAt: null,
-    createdAt: now,
-    updatedAt: now,
-  }
-  if (existing && existing.email !== input.email) index.byEmail.delete(existing.email)
+  if (moves) leaveAddress(index, existing, now)
+  const row = existing ?? newRow(input.email, now)
   row.email = input.email
   if (externalId) row.externalId = externalId
   if (input.firstName !== undefined) row.firstName = input.firstName
@@ -123,6 +114,34 @@ function applyUpsert(index: Index, { externalId, ...input }: ContactUpsert): Ups
   addToIndex(index, row)
   ;(existing ? index.changed : index.created).add(row)
   return { ok: true }
+}
+
+function newRow(email: string, now: Date): ContactRow {
+  return {
+    id: crypto.randomUUID(),
+    externalId: null,
+    email,
+    firstName: null,
+    fields: {},
+    status: "subscribed",
+    statusChangedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+/**
+ * Frees the address a contact moves away from. If the contact unsubscribed, bounced or
+ * complained, a detached row keeps that status at the old address, as `deleteContact` does:
+ * otherwise adding the address again, even later in the same call, would subscribe it afresh.
+ */
+function leaveAddress(index: Index, contact: ContactRow, now: Date) {
+  index.byEmail.delete(contact.email)
+  if (contact.status === "subscribed") return
+  const { status, statusChangedAt } = contact
+  const detached = { ...newRow(contact.email, now), status, statusChangedAt }
+  addToIndex(index, detached)
+  index.created.add(detached)
 }
 
 /** Updates run first, so an address an existing contact moved away from is free to insert. */
@@ -230,6 +249,22 @@ export async function setContactStatus(
     .update(contacts)
     .set({ status, statusChangedAt: new Date() })
     .where(and(eq(contacts.id, id), onlyFrom && eq(contacts.status, onlyFrom)))
+}
+
+/**
+ * Stops campaigns to the contacts `where` matches after the provider reports a bounce or a spam
+ * complaint. A bounce only replaces "subscribed": it belongs to the address, and a later email
+ * change resubscribes the contact, so it must never stand in for an opt-out or a complaint. A
+ * complaint replaces an unsubscribe and a bounce too, because it belongs to the person: their
+ * single emails stop as well, and no email change or resubscribe link undoes it.
+ */
+export async function suppressContact(where: SQL, status: "bounced" | "complained") {
+  const replaces =
+    status === "bounced" ? eq(contacts.status, "subscribed") : ne(contacts.status, "complained")
+  await db()
+    .update(contacts)
+    .set({ status, statusChangedAt: new Date() })
+    .where(and(where, replaces))
 }
 
 function toContactDto(row: typeof contacts.$inferSelect): Contact {

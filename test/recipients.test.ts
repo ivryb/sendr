@@ -108,23 +108,20 @@ describe("provider events", () => {
     })
   }
 
-  async function messageIdFor(campaignId: string, email: string) {
-    // The memory provider doesn't expose message IDs, so look them up the way SES would.
-    const { env } = await import("cloudflare:test")
-    const row = await env.DB.prepare(
-      `SELECT d.provider_message_id AS id FROM deliveries d JOIN contacts c ON c.id = d.contact_id
-       WHERE d.campaign_id = ? AND c.email = ?`
-    )
-      .bind(campaignId, email)
-      .first<{ id: string }>()
-    return row!.id
-  }
+  /** The provider's ID for the latest email to `email`, as SES events carry it. */
+  const messageIdTo = (email: string) =>
+    sentEmails().findLast((sent) => sent.to === email)!.providerMessageId
 
   const sesEvent = (eventType: string, messageId: string, extra = {}) => ({
     eventType,
     mail: { messageId },
     ...extra,
   })
+
+  const permanentBounce = (messageId: string) =>
+    sesEvent("Bounce", messageId, { bounce: { bounceType: "Permanent" } })
+  const changeEmail = (externalId: string, email: string) =>
+    request(`/api/v1/contacts/${externalId}`, { method: "PUT", bearer: apiKey, json: { email } })
 
   it("rejects events without the webhook secret", async () => {
     const response = await postSesEvent(sesEvent("Delivery", "x"), "wrong")
@@ -133,17 +130,13 @@ describe("provider events", () => {
 
   it("records deliveries", async () => {
     const id = await sendCampaign()
-    await postSesEvent(sesEvent("Delivery", await messageIdFor(id, "ann@example.com")))
+    await postSesEvent(sesEvent("Delivery", messageIdTo("ann@example.com")))
     expect((await getCampaign(id)).counts).toMatchObject({ delivered: 1, sent: 1 })
   })
 
   it("a permanent bounce marks the contact bounced and excludes it from later campaigns", async () => {
     const id = await sendCampaign()
-    await postSesEvent(
-      sesEvent("Bounce", await messageIdFor(id, "ann@example.com"), {
-        bounce: { bounceType: "Permanent" },
-      })
-    )
+    await postSesEvent(permanentBounce(messageIdTo("ann@example.com")))
     expect((await getCampaign(id)).counts.bounced).toBe(1)
     expect(await contactStatus("ann@example.com")).toBe("bounced")
 
@@ -153,9 +146,9 @@ describe("provider events", () => {
   })
 
   it("a transient bounce changes nothing", async () => {
-    const id = await sendCampaign()
+    await sendCampaign()
     await postSesEvent(
-      sesEvent("Bounce", await messageIdFor(id, "ann@example.com"), {
+      sesEvent("Bounce", messageIdTo("ann@example.com"), {
         bounce: { bounceType: "Transient" },
       })
     )
@@ -164,34 +157,95 @@ describe("provider events", () => {
 
   it("a spam complaint marks the contact complained", async () => {
     const id = await sendCampaign()
-    await postSesEvent(sesEvent("Complaint", await messageIdFor(id, "bob@example.com")))
+    await postSesEvent(sesEvent("Complaint", messageIdTo("bob@example.com")))
     expect((await getCampaign(id)).counts.complained).toBe(1)
     expect(await contactStatus("bob@example.com")).toBe("complained")
   })
 
   it("a corrected email gets a bounced contact mail again, but a complaint stays", async () => {
-    const id = await sendCampaign()
-    await postSesEvent(
-      sesEvent("Bounce", await messageIdFor(id, "ann@example.com"), {
-        bounce: { bounceType: "Permanent" },
-      })
-    )
-    await postSesEvent(sesEvent("Complaint", await messageIdFor(id, "bob@example.com")))
-    const put = (externalId: string, email: string) =>
-      request(`/api/v1/contacts/${externalId}`, { method: "PUT", bearer: apiKey, json: { email } })
-    await put("u1", "ann@fixed.example.com")
-    await put("u2", "bob@new.example.com")
+    await sendCampaign()
+    await postSesEvent(permanentBounce(messageIdTo("ann@example.com")))
+    await postSesEvent(sesEvent("Complaint", messageIdTo("bob@example.com")))
+    await changeEmail("u1", "ann@fixed.example.com")
+    await changeEmail("u2", "bob@new.example.com")
     expect(await contactStatus("ann@fixed.example.com")).toBe("subscribed")
     expect(await contactStatus("bob@new.example.com")).toBe("complained")
   })
 
+  it("an address keeps its bounce or complaint after its contact moves to a new one", async () => {
+    await sendCampaign()
+    await postSesEvent(permanentBounce(messageIdTo("ann@example.com")))
+    await postSesEvent(sesEvent("Complaint", messageIdTo("bob@example.com")))
+    await request("/api/v1/contacts/batch", {
+      bearer: apiKey,
+      json: {
+        contacts: [
+          { externalId: "u1", email: "ann@fixed.example.com" },
+          { externalId: "u2", email: "bob@new.example.com" },
+          { externalId: "new-ann", email: "ann@example.com" },
+          { externalId: "new-bob", email: "bob@example.com" },
+        ],
+      },
+    })
+    expect(await contactStatus("ann@example.com")).toBe("bounced")
+    expect(await contactStatus("bob@example.com")).toBe("complained")
+  })
+
+  it("moving a bounced contact away and back in one batch doesn't clear the bounce", async () => {
+    await sendCampaign()
+    await postSesEvent(permanentBounce(messageIdTo("ann@example.com")))
+    await request("/api/v1/contacts/batch", {
+      bearer: apiKey,
+      json: {
+        contacts: [
+          { externalId: "u1", email: "ann@other.example.com" },
+          { externalId: "u1", email: "ann@example.com" },
+        ],
+      },
+    })
+    expect(await contactStatus("ann@example.com")).toBe("bounced")
+  })
+
+  it("a receipt bouncing after an unsubscribe keeps the opt-out, even at a new address", async () => {
+    await request("/api/v1/contacts/u1", {
+      method: "PUT",
+      bearer: apiKey,
+      json: { email: "ann@example.com", unsubscribed: true },
+    })
+    const emailsKey = await createApiKey(admin, ["emails"])
+    await request("/api/v1/emails", {
+      bearer: emailsKey,
+      json: { from: "evan@example.com", to: "ann@example.com", subject: "Receipt", markdown: "Thanks" },
+    })
+    await postSesEvent(permanentBounce(messageIdTo("ann@example.com")))
+    expect(await contactStatus("ann@example.com")).toBe("unsubscribed")
+
+    await changeEmail("u1", "ann@newjob.example.com")
+    expect(await contactStatus("ann@newjob.example.com")).toBe("unsubscribed")
+  })
+
+  it("a bounce arriving after a complaint keeps the complaint, even at a new address", async () => {
+    await sendCampaign()
+    const earlier = messageIdTo("bob@example.com")
+    await sendCampaign()
+    await postSesEvent(sesEvent("Complaint", messageIdTo("bob@example.com")))
+    await postSesEvent(permanentBounce(earlier))
+    expect(await contactStatus("bob@example.com")).toBe("complained")
+
+    await changeEmail("u2", "bob@new.example.com")
+    expect(await contactStatus("bob@new.example.com")).toBe("complained")
+  })
+
+  it("a complaint replaces an unsubscribe", async () => {
+    await sendCampaign()
+    await request(unsubscribePath("bob@example.com"), { method: "POST" })
+    await postSesEvent(sesEvent("Complaint", messageIdTo("bob@example.com")))
+    expect(await contactStatus("bob@example.com")).toBe("complained")
+  })
+
   it("the contacts API can't resubscribe a bounced contact", async () => {
-    const id = await sendCampaign()
-    await postSesEvent(
-      sesEvent("Bounce", await messageIdFor(id, "ann@example.com"), {
-        bounce: { bounceType: "Permanent" },
-      })
-    )
+    await sendCampaign()
+    await postSesEvent(permanentBounce(messageIdTo("ann@example.com")))
     await request("/api/v1/contacts/u1", {
       method: "PUT",
       bearer: apiKey,

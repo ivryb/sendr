@@ -67,6 +67,18 @@ describe("contacts API", () => {
     expect((await listContacts())[0].status).toBe("unsubscribed")
   })
 
+  it("an address keeps its opt-out after its contact moves to a new one", async () => {
+    await upsert("u1", { email: "ann@example.com", unsubscribed: true })
+    await upsert("u1", { email: "ann@new.example.com" })
+    await upsert("new-ann", { email: "ann@example.com" })
+    expect(await listContacts("?q=ann")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ externalId: "u1", email: "ann@new.example.com", status: "unsubscribed" }),
+        expect.objectContaining({ externalId: "new-ann", email: "ann@example.com", status: "unsubscribed" }),
+      ])
+    )
+  })
+
   it("rejects an email that belongs to another user", async () => {
     await upsert("u1", { email: "ann@example.com" })
     const response = await upsert("u2", { email: "ann@example.com" })

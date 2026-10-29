@@ -6,14 +6,15 @@ import { CONFIGURATION_SET } from "./ses-account"
 import { sesProvider } from "./ses"
 
 /** Emails accepted by the "memory" provider, for tests and local development. */
-export const memoryOutbox: OutgoingEmail[] = []
+export const memoryOutbox: (OutgoingEmail & { providerMessageId: string })[] = []
 
 const memory: EmailProvider = {
   maxSendsPerSecond: Infinity,
   async send(email) {
-    memoryOutbox.push(email)
+    const providerMessageId = `memory-${crypto.randomUUID()}`
+    memoryOutbox.push({ ...email, providerMessageId })
     console.log(`[memory email] to ${email.to}: ${email.subject}`)
-    return { providerMessageId: `memory-${crypto.randomUUID()}` }
+    return { providerMessageId }
   },
 }
 
