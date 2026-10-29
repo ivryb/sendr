@@ -60,7 +60,9 @@ async function shoot(content: string, width: number) {
   try {
     const tab = await browser.newPage()
     await tab.setViewport({ width, height: 400, deviceScaleFactor: 2 })
-    await tab.setContent(content, { waitUntil: "load" })
+    // The campaign can point at any server; a slow one mustn't hold the browser for puppeteer's
+    // default 30 seconds of the 10 free browser-minutes a day.
+    await tab.setContent(content, { waitUntil: "load", timeout: 10_000 })
     return new Uint8Array(await tab.screenshot({ type: "png", fullPage: true }))
   } finally {
     await browser.close()
