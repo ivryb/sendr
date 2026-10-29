@@ -2,14 +2,14 @@ import { useState } from "react"
 import {
   CheckIcon,
   CircleAlertIcon,
-  ClockIcon,
+  EyeIcon,
   ShieldCheckIcon,
+  XIcon,
 } from "lucide-react"
 import { Link } from "react-router"
 import { cn } from "cn"
 
 import { BackToCampaigns } from "@/components/back-link"
-import { CampaignStatusBadge } from "@/components/campaign-status"
 import { EmailPreview } from "@/components/email-preview"
 import {
   AlertDialog,
@@ -22,11 +22,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { Spinner } from "@/components/ui/spinner"
 import { api } from "@/lib/api"
 import {
-  CAMPAIGN_STAGES,
   DELIVERY_LABELS,
   RATE_LIMITS,
   deliveryStats,
@@ -101,7 +99,6 @@ export function CampaignDetail({
   sender: Sender | null
   footer: string
 }) {
-  const { formatDateTime } = useDates()
   const actions = CAMPAIGN_ACTIONS[campaign.status].filter(
     (action): action is RunAction => action !== "start"
   )
@@ -109,25 +106,15 @@ export function CampaignDetail({
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-4">
         <BackToCampaigns />
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <CampaignStatusBadge campaign={campaign} />
-              {campaign.stalled && campaign.progressAt ? (
-                <span className="text-xs text-amber-600 dark:text-amber-400">
-                  No progress since {formatDateTime(campaign.progressAt)}
-                </span>
-              ) : (
-                campaign.startedAt && (
-                  <span className="text-xs text-muted-foreground">
-                    Started {formatDateTime(campaign.startedAt)}
-                  </span>
-                )
-              )}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-4">
+            <ProgressRing campaign={campaign} />
+            <div className="flex min-w-0 flex-col gap-1">
+              <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
+                {campaign.subject}
+              </h1>
+              <StatusLine campaign={campaign} />
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
-              {campaign.subject}
-            </h1>
           </div>
           {actions.length > 0 && (
             <div className="flex flex-wrap gap-2">
@@ -142,20 +129,6 @@ export function CampaignDetail({
           )}
         </div>
       </div>
-
-      <section className="flex flex-col gap-6 rounded-xl bg-card p-5 ring-1 ring-foreground/10 sm:p-6">
-        {campaign.status === "cancelled" ? (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CircleAlertIcon className="size-4" />
-            Cancelled
-            {campaign.finishedAt && ` ${formatDateTime(campaign.finishedAt)}`}.
-            Nobody else will get it.
-          </p>
-        ) : (
-          <StageIndicator campaign={campaign} />
-        )}
-        <SendProgress campaign={campaign} />
-      </section>
 
       {campaign.status === "awaiting_approval" && (
         <Review campaign={campaign} />
@@ -187,68 +160,105 @@ export function CampaignDetail({
   )
 }
 
-function StageIndicator({ campaign }: { campaign: Campaign }) {
-  const current = CAMPAIGN_STAGES.findIndex(
-    (stage) => stage.status === campaign.status
-  )
-  const finished = campaign.status === "sent"
+/** How far the current stage is: the first batch until it's approved, then everyone. */
+function stageProgress({ status, counts, firstBatchSize }: Campaign) {
+  const { handedOff, processed } = deliveryStats(counts)
+  const firstBatch = status === "first_batch" || status === "awaiting_approval"
+  const size = firstBatch
+    ? Math.min(firstBatchSize, counts.total)
+    : counts.total
+  return { sent: handedOff, size, done: size ? processed / size : 0 }
+}
+
+const RING_TONES = {
+  live: "text-foreground",
+  attention: "text-amber-500",
+  sent: "text-emerald-500",
+  cancelled: "text-muted-foreground/60",
+}
+
+function ringTone({ status, stalled }: Campaign): keyof typeof RING_TONES {
+  if (stalled || status === "awaiting_approval") return "attention"
+  if (status === "sent" || status === "cancelled") return status
+  return "live"
+}
+
+const RING_RADIUS = 32
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS
+
+function ProgressRing({ campaign }: { campaign: Campaign }) {
+  const { status } = campaign
+  const done = status === "sent" ? 1 : stageProgress(campaign).done
   return (
-    <ol className="grid grid-cols-4 gap-2">
-      {CAMPAIGN_STAGES.map((stage, index) => {
-        const done = index < current || finished
-        const active = index === current && !finished
-        return (
-          <li key={stage.status} className="flex flex-col gap-2">
-            <span
-              className={cn(
-                "h-1 rounded-full bg-muted transition-colors",
-                (done || active) && "bg-primary",
-                active && stage.status === "awaiting_approval" && "bg-amber-500"
-              )}
-            />
-            <span
-              className={cn(
-                "flex items-center gap-1 text-xs text-muted-foreground sm:text-sm",
-                active && "font-medium text-foreground"
-              )}
-            >
-              {done && <CheckIcon className="size-3.5 shrink-0" />}
-              {stage.label}
-            </span>
-          </li>
-        )
-      })}
-    </ol>
+    <div
+      aria-hidden
+      className={cn(
+        "relative grid size-14 shrink-0 place-items-center sm:size-18",
+        RING_TONES[ringTone(campaign)]
+      )}
+    >
+      <svg viewBox="0 0 72 72" className="absolute inset-0 -rotate-90">
+        <circle
+          cx="36"
+          cy="36"
+          r={RING_RADIUS}
+          fill="none"
+          stroke="currentColor"
+          strokeOpacity={0.12}
+          strokeWidth="7"
+        />
+        <circle
+          cx="36"
+          cy="36"
+          r={RING_RADIUS}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="7"
+          strokeLinecap="round"
+          strokeDasharray={`${done * RING_LENGTH} ${RING_LENGTH}`}
+          className="transition-[stroke-dasharray] duration-500"
+        />
+      </svg>
+      {status === "awaiting_approval" ? (
+        <EyeIcon className="size-5" />
+      ) : status === "sent" ? (
+        <CheckIcon className="size-6" strokeWidth={3} />
+      ) : status === "cancelled" ? (
+        <XIcon className="size-5" />
+      ) : (
+        <span className="text-xs font-semibold tabular-nums sm:text-sm">
+          {Math.floor(done * 100)}%
+        </span>
+      )}
+    </div>
   )
 }
 
-function SendProgress({ campaign }: { campaign: Campaign }) {
-  const { counts } = campaign
-  const { handedOff, processed } = deliveryStats(counts)
-  const awaitingReports = counts.sent
+function StatusLine({ campaign }: { campaign: Campaign }) {
+  const { formatDateTime } = useDates()
+  const { status, counts, stalled, progressAt, finishedAt } = campaign
+  const { sent, size } = stageProgress(campaign)
+  const progress = `${formatNumber(sent)} of ${formatNumber(size)} sent`
+  const text =
+    stalled && progressAt
+      ? `No progress since ${formatDateTime(progressAt)} · ${progress}`
+      : {
+          draft: null,
+          first_batch: `Sending the first batch · ${progress}`,
+          awaiting_approval: `The first ${formatNumber(sent)} went out. Check how they landed, then send to the other ${formatNumber(counts.queued)}.`,
+          sending: `Sending to everyone · ${progress}`,
+          sent: `Sent to ${plural(sent, "contact")}${finishedAt ? ` · ${formatDateTime(finishedAt)}` : ""}`,
+          cancelled: `Cancelled after ${progress}. The other ${formatNumber(counts.queued)} won't get it.`,
+        }[status]
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <span className="text-sm">
-          <span className="text-lg font-semibold tabular-nums">
-            {formatNumber(handedOff)}
-          </span>{" "}
-          <span className="text-muted-foreground">
-            of {plural(counts.total, "contact")} sent
-          </span>
-        </span>
-        {awaitingReports > 0 && (
-          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-            <ClockIcon className="size-3.5" />
-            Waiting on delivery reports for {formatNumber(awaitingReports)}
-          </span>
-        )}
-      </div>
-      <Progress
-        value={counts.total ? (processed / counts.total) * 100 : 0}
-        aria-label="Sending progress"
-      />
-    </div>
+    <p
+      className={cn(
+        "text-sm text-muted-foreground tabular-nums",
+        stalled && "text-amber-600 dark:text-amber-400"
+      )}
+    >
+      {text}
+    </p>
   )
 }
 
@@ -350,7 +360,10 @@ function countStats(name: DeliveryStatus | Engagement, campaign: Campaign) {
   const rate = deliveryStats(counts).rate(name)
   return {
     // A cancelled campaign's queued contacts will never get it.
-    label: name === "queued" && campaign.status === "cancelled" ? "Not sent" : DELIVERY_LABELS[name],
+    label:
+      name === "queued" && campaign.status === "cancelled"
+        ? "Not sent"
+        : DELIVERY_LABELS[name],
     rate: limit === undefined ? null : rate,
     high: limit !== undefined && rate > limit,
   }

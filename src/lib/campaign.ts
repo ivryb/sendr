@@ -53,14 +53,6 @@ export function refreshInterval(
   return interval && Math.max(interval, deliveries * MS_PER_DELIVERY)
 }
 
-/** The stages a started campaign moves through, in order. */
-export const CAMPAIGN_STAGES = [
-  { status: "first_batch", label: "First batch" },
-  { status: "awaiting_approval", label: "Review" },
-  { status: "sending", label: "Sending" },
-  { status: "sent", label: "Sent" },
-] as const satisfies { status: CampaignStatus; label: string }[]
-
 export const DELIVERY_LABELS: Record<DeliveryStatus, string> = {
   queued: "Queued",
   sent: "Sent",
