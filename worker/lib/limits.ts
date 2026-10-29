@@ -7,8 +7,9 @@ const DAILY_LIMITS = [
   { pattern: /daily row write limit/, limit: "100,000 database rows written a day" },
 ]
 
-// The runtime's messages past 50 subrequests (fetches and D1 queries) in one invocation.
-const INVOCATION_LIMIT = /Too many subrequests|Too many API requests by single worker invocation/
+// The runtime's message past 50 subrequests in one invocation, and D1's past 50 queries, which
+// its docs spell "by single Worker invocation".
+const INVOCATION_LIMIT = /Too many subrequests|Too many API requests by single worker invocation/i
 
 /** Cloudflare refused the work because the account hit a Workers Free limit. */
 export class LimitError extends DomainError {

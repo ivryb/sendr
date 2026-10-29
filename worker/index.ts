@@ -35,8 +35,9 @@ const app = new Hono<{ Bindings: Env }>()
     return c.json({ error: "internal_error" }, 500)
   })
 
-// The longest a queue message can be delayed, in seconds (Queues limits).
-const MAX_QUEUE_DELAY = 24 * 60 * 60
+// Workers Free queues keep a message for 24 hours. A limit still on at the retry after the
+// reset would otherwise wait another whole day and expire the message, ending the campaign.
+const MAX_LIMIT_WAIT = 12 * 60 * 60
 
 // Everything else is the admin app, rendered by React Router.
 const renderPage = createRequestHandler(
@@ -61,7 +62,7 @@ export default {
         const limit = limitError(error)
         if (!limit?.daily) throw error
         console.warn(limit.message)
-        message.retry({ delaySeconds: Math.min(secondsUntilReset() + 300, MAX_QUEUE_DELAY) })
+        message.retry({ delaySeconds: Math.min(secondsUntilReset() + 300, MAX_LIMIT_WAIT) })
       }
     }
   },

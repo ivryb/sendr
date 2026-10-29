@@ -15,10 +15,11 @@ import { trackEmail } from "./tracking"
 export const UNSUBSCRIBE_PURPOSE = "unsubscribe"
 export const TEST_UNSUBSCRIBE_TOKEN = "test"
 
-// Workers Free allows 50 D1 queries and 50 subrequests (fetches and D1 queries together) per
-// invocation. Past that, the write after a send throws once SES has accepted the email, and
-// the whole message reruns and resends. 15 deliveries take 4 setup queries, 15 SES fetches,
-// 15 writes and 3 queries to move on: 37, with room for the queue send.
+// Workers Free allows 50 subrequests per invocation (fetches and calls to D1 alike, by the
+// Workers limits page), and D1 its own 50 queries. Past either, the write after a send throws
+// once SES has accepted the email, and the whole message reruns and resends. A message takes 4
+// setup queries and a send and a write per delivery, then a queue send after a full 15 or 3
+// queries to move on after fewer: at most 35 subrequests, 21 of them queries.
 const DELIVERIES_PER_MESSAGE = 15
 
 /**

@@ -284,11 +284,14 @@ describe("within Cloudflare's limits", () => {
     return retry.mock.calls[0]?.[0]
   }
 
+  /** Fails the next `times` queries when they run, as D1 does, so Drizzle wraps the error. */
   function failQueries(message: string, times = Infinity) {
     const prepare = env.DB.prepare
     let failures = 0
+    const fail = () => Promise.reject(new Error(message))
+    const failing = { bind: () => failing, all: fail, first: fail, run: fail, raw: fail }
     const spy = vi.spyOn(env.DB, "prepare").mockImplementation(function (this: D1Database, query) {
-      if (failures++ < times) throw new Error(message)
+      if (failures++ < times) return failing as unknown as D1PreparedStatement
       return prepare.call(this, query)
     })
     onTestFinished(() => spy.mockRestore())
@@ -322,29 +325,40 @@ describe("within Cloudflare's limits", () => {
     expect((await campaign(id)).status).toBe("sent")
   })
 
+  /** Sets the clock the Worker reads, as if the message or request came at `now`. */
+  function setClock(now: number) {
+    vi.useFakeTimers({ toFake: ["Date"], now })
+    onTestFinished(() => void vi.useRealTimers())
+  }
+
   it("a used-up daily D1 limit holds the message until the limit resets", async () => {
     const id = await startHeld(3)
     failQueries(WRITE_LIMIT)
+    setClock(Date.parse("2026-10-29T20:00:00Z"))
 
     const retry = await deliver(id)
 
-    const midnight = new Date().setUTCHours(24, 0, 0, 0)
-    const resumesAt = Date.now() + (retry?.delaySeconds ?? 0) * 1000
-    expect(resumesAt).toBeGreaterThan(midnight)
-    expect(resumesAt).toBeLessThan(midnight + 10 * 60_000)
+    // 00:05 UTC, five minutes past the reset.
+    expect(retry).toEqual({ delaySeconds: 4 * 3600 + 300 })
     expect(sentEmails()).toHaveLength(0)
   })
 
-  /** Moves the clock the campaign is read with, as if the admin app refreshed `ms` later. */
-  function later(ms: number) {
-    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + ms })
-    onTestFinished(() => void vi.useRealTimers())
-  }
+  it("a limit still on after the reset retries well before the queue drops the message", async () => {
+    const id = await startHeld(3)
+    failQueries(WRITE_LIMIT)
+    setClock(Date.parse("2026-10-30T00:05:00Z"))
+
+    const retry = await deliver(id)
+
+    // Workers Free queues keep a message for 24 hours, and it has waited since before midnight.
+    expect(retry?.delaySeconds).toBeGreaterThan(0)
+    expect(retry?.delaySeconds).toBeLessThanOrEqual(12 * 3600)
+  })
 
   it("a send with no progress for 5 minutes shows as stalled", async () => {
     const id = await startHeld(3)
     expect(await campaign(id)).toMatchObject({ live: true, stalled: false })
-    later(6 * 60_000)
+    setClock(Date.now() + 6 * 60_000)
     expect(await campaign(id)).toMatchObject({ live: true, stalled: true })
   })
 
@@ -352,12 +366,23 @@ describe("within Cloudflare's limits", () => {
     const id = await startHeld(3)
     await deliver(id)
     expect(await campaign(id)).toMatchObject({ status: "sent", live: true, stalled: false })
-    later(61 * 60_000)
+    setClock(Date.now() + 61 * 60_000)
     expect(await campaign(id)).toMatchObject({ live: false, stalled: false })
   })
 
   it("a draft never refreshes", async () => {
     expect(await newCampaign()).toMatchObject({ live: false, stalled: false })
+  })
+
+  it("the API says when a request needed more queries than Workers Free allows", async () => {
+    // D1's message, as its limits page spells it.
+    failQueries("D1_ERROR: Too many API requests by single Worker invocation.")
+    const response = await request("/api/v1/campaigns", { cookie: admin })
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({
+      error: "cloudflare_limit",
+      message: expect.stringMatching(/more than the 50 database queries/),
+    })
   })
 
   it("the API says which Workers Free limit was hit and when it resets", async () => {
