@@ -134,6 +134,7 @@ Starting a campaign emails real people, and approving it emails everyone. Before
 Look at it yourself, then show it to the user: embed it in your reply if your interface renders images (`![Preview](/tmp/sendr-preview.png)`), or open it for them with `open` (macOS) or `xdg-open` (Linux).
 
 - Update Sendr: `cd "$SENDR_CHECKOUT" && git pull && bun install && bun run deploy`.
+- Import a list from another tool, such as a CSV export: read it yourself and send `POST /contacts/batch` calls of up to 1,000 contacts, each with `email` and no `externalId`. Give everyone the old tool lists as unsubscribed, bounced or complained `"unsubscribed": true`.
 - A key for the user's app: `bun run api-key "$SENDR_URL" --name "<app> backend" --permissions contacts,emails` in the checkout prints one.
 - SES production access, including what to do after a denial: `$SENDR_CHECKOUT/docs/ses-production-access.md`.
 ```

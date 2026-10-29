@@ -24,6 +24,7 @@ import {
   listContacts,
   setContactStatus,
   upsertContact,
+  upsertContacts,
 } from "../domain/contacts"
 import { emailInput, getEmail, sendSingleEmail } from "../domain/emails"
 import { mediaQuery, uploadMedia } from "../domain/media"
@@ -82,7 +83,7 @@ function requires(permission: ApiKeyPermission | "admin") {
 
 const csrfGuard = csrf()
 
-const BATCH_LIMIT = 100
+const BATCH_LIMIT = 1000
 
 const contactsQuery = z.object({
   q: z.string().optional(),
@@ -93,7 +94,7 @@ const contactsQuery = z.object({
 
 const batchInput = z.object({
   contacts: z
-    .array(contactInput.extend({ externalId: z.string().min(1) }))
+    .array(contactInput.extend({ externalId: z.string().min(1).optional() }))
     .min(1)
     .max(BATCH_LIMIT),
 })
@@ -138,11 +139,14 @@ export const api = new Hono<ApiEnv>()
   })
   .post("/contacts/batch", requires("contacts"), async (c) => {
     const input = await parseJson(c, batchInput)
-    const results = []
-    for (const { externalId, ...contact } of input.contacts) {
-      results.push({ externalId, ...(await upsertContact(externalId, contact)) })
-    }
-    return c.json({ results })
+    const results = await upsertContacts(input.contacts)
+    return c.json({
+      results: input.contacts.map(({ externalId, email }, i) => ({
+        ...(externalId && { externalId }),
+        email,
+        ...results[i],
+      })),
+    })
   })
   .delete("/contacts/:externalId", requires("contacts"), async (c) => {
     await deleteContact(c.req.param("externalId"))

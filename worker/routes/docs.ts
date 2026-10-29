@@ -32,7 +32,11 @@ same contact. New contacts start subscribed.
 - \`PUT /contacts/{externalId}\` with \`{ "email", "firstName"?, "fields"?: { "plan": "pro" }, "unsubscribed"?: true }\`
   adds or updates one contact. \`409 email_taken\` if the email belongs to another user ID.
   \`unsubscribed: true\` unsubscribes. Updating a contact never resubscribes it.
-- \`POST /contacts/batch\` with \`{ "contacts": [{ "externalId", "email", ... }] }\`, up to 100.
+- \`POST /contacts/batch\` with \`{ "contacts": [{ "externalId"?, "email", ... }] }\`, up to 1,000, adds or
+  updates each in order and returns \`results\` in the same order. Without \`externalId\` a contact is
+  matched by email, which imports a list from another tool; a later call with the user ID attaches
+  to the same contact. Mark anyone the old tool had as unsubscribed, bounced or complained with
+  \`unsubscribed: true\`.
 - \`DELETE /contacts/{externalId}\` removes a contact, for example when the user deletes their account.
   Someone who unsubscribed, bounced or complained is remembered by address, so adding them back
   keeps them opted out.

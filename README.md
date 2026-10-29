@@ -91,7 +91,7 @@ curl -X PUT https://emails.example.com/api/v1/contacts/user_123 \
   -H "Authorization: Bearer sk_..." -H "Content-Type: application/json" \
   -d '{ "email": "ann@example.com", "firstName": "Ann", "fields": { "plan": "pro" } }'
 
-# Add or update up to 100 contacts per call
+# Add or update up to 1,000 contacts per call
 curl -X POST https://emails.example.com/api/v1/contacts/batch \
   -H "Authorization: Bearer sk_..." -H "Content-Type: application/json" \
   -d '{ "contacts": [{ "externalId": "user_123", "email": "ann@example.com" }] }'
@@ -101,6 +101,7 @@ curl -X DELETE https://emails.example.com/api/v1/contacts/user_123 -H "Authoriza
 ```
 
 - New contacts start subscribed. Pass `"unsubscribed": true` to import someone who already opted out.
+- To import a list from another tool, leave out `externalId`: the batch call matches those contacts by email, and your app's later calls with a user ID attach to them.
 - Updating a contact never resubscribes it. Only the recipient (from the unsubscribe page) or an admin can.
 - Deleting someone who unsubscribed, bounced or complained keeps their address on file, so adding them back keeps them opted out.
 - An email that already belongs to another user ID is rejected with `409`. Every call is safe to repeat, so rerunning a full backfill repairs any drift.

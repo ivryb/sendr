@@ -93,9 +93,9 @@ describe("contacts API", () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       results: [
-        { externalId: "u1", ok: true },
-        { externalId: "u2", ok: true },
-        { externalId: "u3", ok: false, error: "email_taken" },
+        { externalId: "u1", email: "one@example.com", ok: true },
+        { externalId: "u2", email: "two@example.com", ok: true },
+        { externalId: "u3", email: "taken@example.com", ok: false, error: "email_taken" },
       ],
     })
     expect(await listContacts("?status=subscribed")).toHaveLength(2)
@@ -119,6 +119,68 @@ describe("contacts API", () => {
       cookie: admin,
     })
     expect((await upsert("u1", { email: "ann@example.com" })).status).toBe(401)
+  })
+})
+
+describe("bulk import", () => {
+  const importContacts = (contacts: Record<string, unknown>[]) =>
+    request("/api/v1/contacts/batch", { bearer: apiKey, json: { contacts } })
+
+  it("imports a list exported from another tool, keyed by email, and a later push by user ID attaches to it", async () => {
+    const response = await importContacts([
+      { email: "Ann@Example.com", firstName: "Ann" },
+      { email: "gone@example.com", unsubscribed: true },
+    ])
+    expect(await response.json()).toEqual({
+      results: [
+        { email: "ann@example.com", ok: true },
+        { email: "gone@example.com", ok: true },
+      ],
+    })
+
+    await upsert("u1", { email: "ann@example.com", fields: { plan: "pro" } })
+    await importContacts([{ externalId: "u2", email: "gone@example.com" }])
+    expect(await listContacts("?q=example")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ externalId: "u1", email: "ann@example.com", firstName: "Ann", status: "subscribed" }),
+        expect.objectContaining({ externalId: "u2", email: "gone@example.com", status: "unsubscribed" }),
+      ])
+    )
+    expect(await listContacts()).toHaveLength(2)
+  })
+
+  it("re-importing never resubscribes anyone", async () => {
+    await importContacts([{ email: "ann@example.com", unsubscribed: true }])
+    await importContacts([{ email: "ann@example.com", unsubscribed: false }])
+    expect((await listContacts())[0].status).toBe("unsubscribed")
+  })
+
+  it("imports 1,000 contacts in one call", async () => {
+    const contacts = Array.from({ length: 1000 }, (_, i) => ({ email: `user${i}@example.com` }))
+    const response = await importContacts(contacts)
+    expect(response.status).toBe(200)
+    const counts = await request("/api/v1/contacts?limit=1", { cookie: admin })
+    expect((await counts.json<{ total: number }>()).total).toBe(1000)
+  })
+
+  it("refuses more than 1,000 contacts in one call", async () => {
+    const contacts = Array.from({ length: 1001 }, (_, i) => ({ email: `user${i}@example.com` }))
+    expect((await importContacts(contacts)).status).toBe(400)
+  })
+
+  it("an address listed twice in one call becomes one contact with the later values", async () => {
+    await importContacts([
+      { email: "ann@example.com", firstName: "Annie" },
+      { externalId: "u1", email: "ann@example.com", firstName: "Ann" },
+    ])
+    expect(await listContacts()).toMatchObject([{ externalId: "u1", email: "ann@example.com", firstName: "Ann" }])
+  })
+
+  it("a user can't move to an address another contact already has", async () => {
+    await importContacts([{ email: "ann@example.com" }])
+    await upsert("u1", { email: "bob@example.com" })
+    const response = await upsert("u1", { email: "ann@example.com" })
+    expect(response.status).toBe(409)
   })
 })
 
