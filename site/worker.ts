@@ -53,8 +53,9 @@ function inbox(email: string) {
 
 /**
  * Counts a send against today's caps, or refuses it once either is reached. Rate limits only
- * count per Cloudflare location, so these counts live in KV. KV can lag by a minute between
- * locations, which lets a few extra through at most.
+ * count per Cloudflare location, so these counts live in KV. A count is read, then written, so
+ * sends at the same moment can each count as one, and KV can lag a minute between locations.
+ * The rate limits bound what slips through: 3 a minute per inbox and 20 overall, per location.
  */
 async function countDailySend(env: Env, inbox: string) {
   const day = new Date().toISOString().slice(0, 10)
