@@ -5,13 +5,23 @@ export const fakeAws = {
   production: true,
   /** AWS rejects the key outright. */
   rejectKey: false,
+  /** The account's 24-hour sending quota, and how much of it the last 24 hours used. */
+  max24HourSend: 50000,
+  sentLast24Hours: 0,
   requests: [] as { method: string; url: string; body: string }[],
 }
 
 export const TOPIC_ARN = "arn:aws:sns:us-east-1:123456789012:sendr-events"
 
 export function resetFakeAws() {
-  Object.assign(fakeAws, { verified: true, production: true, rejectKey: false, requests: [] })
+  Object.assign(fakeAws, {
+    verified: true,
+    production: true,
+    rejectKey: false,
+    max24HourSend: 50000,
+    sentLast24Hours: 0,
+    requests: [],
+  })
 }
 
 export async function fakeAwsResponse(request: Request) {
@@ -38,7 +48,11 @@ export async function fakeAwsResponse(request: Request) {
   if (path === "/account") {
     return Response.json({
       ProductionAccessEnabled: fakeAws.production,
-      SendQuota: { MaxSendRate: 14, Max24HourSend: 50000, SentLast24Hours: 0 },
+      SendQuota: {
+        MaxSendRate: 14,
+        Max24HourSend: fakeAws.max24HourSend,
+        SentLast24Hours: fakeAws.sentLast24Hours,
+      },
     })
   }
   if (request.method === "GET" && path.startsWith("/identities/")) {

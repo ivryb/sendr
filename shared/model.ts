@@ -89,6 +89,8 @@ export type Campaign = {
   createdAt: string
   startedAt: string | null
   finishedAt: string | null
+  /** While it sends, when it last moved on: its latest email, or its start or approval. */
+  progressAt: string | null
   counts: CampaignCounts
 }
 
@@ -109,8 +111,11 @@ export type Media = {
   createdAt: string
 }
 
-/** Contacts one `POST /contacts/batch` call can add or update. */
-export const CONTACTS_BATCH_LIMIT = 1000
+/**
+ * Contacts one `POST /contacts/batch` call can add or update. Workers Free allows 10 ms of CPU
+ * per request; re-pushing 1,000 existing contacts measured 34-65 ms, so a batch stays near it.
+ */
+export const CONTACTS_BATCH_LIMIT = 250
 
 export type Contact = {
   id: string

@@ -5,6 +5,7 @@ import type {
   DeliveryStatus,
   Engagement,
 } from "../../shared/model"
+import { useClientValue } from "./use-client-value"
 
 type StatusMeta = {
   label: string
@@ -36,9 +37,38 @@ export const CAMPAIGN_STATUS: Record<CampaignStatus, StatusMeta> = {
   },
 }
 
-/** How often to refresh a campaign, in ms. Delivery reports keep arriving after it finishes. */
-export function refreshInterval({ status, counts }: Campaign) {
-  return CAMPAIGN_STATUS[status].refresh || (counts.sent > 0 ? 30_000 : false)
+// A refresh reads every delivery it counts, and Workers Free allows 5 million rows read a day.
+// So past a few hundred recipients, refreshes slow down to about 100 deliveries a second.
+const MS_PER_DELIVERY = 10
+
+/**
+ * How often to refresh a campaign, in ms, when a refresh counts `deliveries` (by default the
+ * campaign's own). Delivery reports keep arriving after it finishes.
+ */
+export function refreshInterval(
+  { status, counts }: Campaign,
+  deliveries = counts.total
+) {
+  const interval =
+    CAMPAIGN_STATUS[status].refresh || (counts.sent > 0 ? 30_000 : false)
+  return interval && Math.max(interval, deliveries * MS_PER_DELIVERY)
+}
+
+// The queue retries a failing message for about ten minutes before it gives up.
+const STALLED_AFTER = 5 * 60_000
+
+/**
+ * True once a sending campaign has made no progress for a while: its queue message ran out of
+ * retries, or a daily limit paused it. Read in the browser only, against the reader's clock.
+ */
+export function useStalled({ status, progressAt }: Campaign) {
+  const stalled = useClientValue(
+    () =>
+      (status === "first_batch" || status === "sending") &&
+      progressAt !== null &&
+      Date.now() - Date.parse(progressAt) > STALLED_AFTER
+  )
+  return stalled ?? false
 }
 
 /** The stages a started campaign moves through, in order. */

@@ -1,5 +1,5 @@
-import { createMessageBatch } from "cloudflare:test"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { createMessageBatch, env } from "cloudflare:test"
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest"
 
 import type { Campaign, CampaignLink } from "../shared/model"
 import worker from "../worker"
@@ -193,6 +193,19 @@ describe("sending a campaign", () => {
     expect((await campaign(id)).status).toBe("draft")
   })
 
+  it("won't start a list bigger than what's left of the SES daily quota", async () => {
+    await addContacts(3)
+    const { id } = await newCampaign()
+    Object.assign(fakeAws, { max24HourSend: 10, sentLast24Hours: 8 })
+    const response = await act(id, "start")
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({
+      error: "not_ready",
+      message: expect.stringContaining("can send 2 more emails in the next 24 hours"),
+    })
+    expect((await campaign(id)).status).toBe("draft")
+  })
+
   it("only drafts can be edited", async () => {
     await addContacts(1)
     const { id } = await newCampaign()
@@ -236,6 +249,93 @@ describe("sending a campaign", () => {
     await worker.queue(batch)
 
     expect(sentEmails()).toHaveLength(3)
+  })
+})
+
+describe("within Cloudflare's limits", () => {
+  const WRITE_LIMIT =
+    "D1_ERROR: Your account has exceeded D1's free tier daily row write limit. Upgrade to a paid plan or wait until tomorrow (midnight UTC) to continue."
+  const READ_LIMIT = WRITE_LIMIT.replace("write", "read")
+
+  /** Starts a campaign whose queue messages this test delivers itself, one at a time. */
+  async function startHeld(contacts: number) {
+    const held = vi.spyOn(env.SEND_QUEUE, "send").mockResolvedValue({} as QueueSendResponse)
+    onTestFinished(() => held.mockRestore())
+    await addContacts(contacts)
+    const { id } = await newCampaign({ firstBatchSize: contacts })
+    await act(id, "start")
+    return id
+  }
+
+  /** Delivers one queue message and returns how it asked to be retried, if it did. */
+  async function deliver(campaignId: string) {
+    const batch = createMessageBatch("sendr-send", [
+      { id: "message", timestamp: new Date(), attempts: 1, body: { campaignId } },
+    ])
+    const retry = vi.spyOn(batch.messages[0], "retry")
+    await worker.queue(batch)
+    return retry.mock.calls[0]?.[0]
+  }
+
+  function failQueries(message: string, times = Infinity) {
+    const prepare = env.DB.prepare
+    let failures = 0
+    const spy = vi.spyOn(env.DB, "prepare").mockImplementation(function (this: D1Database, query) {
+      if (failures++ < times) throw new Error(message)
+      return prepare.call(this, query)
+    })
+    onTestFinished(() => spy.mockRestore())
+    return spy
+  }
+
+  it("one queue message stays within the 50 subrequests of a Workers Free invocation", async () => {
+    const id = await startHeld(60)
+    const queries = vi.spyOn(env.DB, "prepare")
+    onTestFinished(() => queries.mockRestore())
+    const queued = vi.mocked(env.SEND_QUEUE.send)
+    queued.mockClear()
+
+    await deliver(id)
+
+    // In production each email is a fetch to SES, and D1 queries count as subrequests too.
+    const subrequests = queries.mock.calls.length + sentEmails().length + queued.mock.calls.length
+    expect(sentEmails().length).toBeGreaterThan(0)
+    expect(queued).toHaveBeenCalledOnce()
+    expect(subrequests).toBeLessThanOrEqual(50)
+  })
+
+  it("a database error retries the message instead of ending the campaign", async () => {
+    const id = await startHeld(3)
+    failQueries("D1_ERROR: Network connection lost.", 1)
+
+    await expect(deliver(id)).rejects.toThrow()
+    await deliver(id)
+
+    expect(sentEmails()).toHaveLength(3)
+    expect((await campaign(id)).status).toBe("sent")
+  })
+
+  it("a used-up daily D1 limit holds the message until the limit resets", async () => {
+    const id = await startHeld(3)
+    failQueries(WRITE_LIMIT)
+
+    const retry = await deliver(id)
+
+    const midnight = new Date().setUTCHours(24, 0, 0, 0)
+    const resumesAt = Date.now() + (retry?.delaySeconds ?? 0) * 1000
+    expect(resumesAt).toBeGreaterThan(midnight)
+    expect(resumesAt).toBeLessThan(midnight + 10 * 60_000)
+    expect(sentEmails()).toHaveLength(0)
+  })
+
+  it("the API says which Workers Free limit was hit and when it resets", async () => {
+    failQueries(READ_LIMIT)
+    const response = await request("/api/v1/campaigns", { cookie: admin })
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({
+      error: "cloudflare_limit",
+      message: expect.stringMatching(/limit of 5 million database rows read a day\. It resets at 00:00 UTC/),
+    })
   })
 })
 

@@ -7,6 +7,7 @@ import { createAuth, isClaimed } from "./auth"
 import type { SendMessage } from "./domain/campaigns"
 import { processSendMessage } from "./domain/sending"
 import { DomainError } from "./lib/errors"
+import { limitError, secondsUntilReset } from "./lib/limits"
 import { getSettings } from "./lib/settings"
 import { api } from "./routes/api"
 import { hooks } from "./routes/hooks"
@@ -26,14 +27,16 @@ const app = new Hono<{ Bindings: Env }>()
   .route("/", tracking)
   .onError((error, c) => {
     if (error instanceof HTTPException) return error.getResponse()
-    if (error instanceof DomainError) {
-      return c.json({ error: error.code, message: error.message }, error.status)
-    }
+    const known = error instanceof DomainError ? error : limitError(error)
+    if (known) return c.json({ error: known.code, message: known.message }, known.status)
     // Drizzle's message lists the query's values, which can be secrets like a sender's AWS key.
     if (error instanceof DrizzleQueryError) console.error(`Failed query: ${error.query}`, error.cause)
     else console.error(error)
     return c.json({ error: "internal_error" }, 500)
   })
+
+// The longest a queue message can be delayed, in seconds (Queues limits).
+const MAX_QUEUE_DELAY = 24 * 60 * 60
 
 // Everything else is the admin app, rendered by React Router.
 const renderPage = createRequestHandler(
@@ -49,8 +52,17 @@ export default {
   fetch: app.fetch,
   async queue(batch) {
     for (const message of batch.messages) {
-      await processSendMessage(message.body)
-      message.ack()
+      try {
+        await processSendMessage(message.body)
+        message.ack()
+      } catch (error) {
+        // A used-up daily limit fails every query until 00:00 UTC. The usual retries, a minute
+        // apart, would all fail and drop the message, so it waits until 5 minutes past the reset.
+        const limit = limitError(error)
+        if (!limit?.daily) throw error
+        console.warn(limit.message)
+        message.retry({ delaySeconds: Math.min(secondsUntilReset() + 300, MAX_QUEUE_DELAY) })
+      }
     }
   },
 } satisfies ExportedHandler<Env, SendMessage>

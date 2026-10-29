@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm"
+import { and, desc, eq, isNull, sql } from "drizzle-orm"
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core"
 
 import type { CampaignLink } from "../../shared/model"
@@ -96,10 +96,11 @@ export async function recordOpen(token: string) {
   const { secret } = await getSettings()
   const deliveryId = await verifyToken(secret, OPEN_PURPOSE, token)
   if (!deliveryId) return
+  // Mail apps load the pixel again on every view, and each rewrite is a D1 row written.
   await db()
     .update(deliveries)
-    .set({ openedAt: firstTime(deliveries.openedAt) })
-    .where(eq(deliveries.id, deliveryId))
+    .set({ openedAt: new Date() })
+    .where(and(eq(deliveries.id, deliveryId), isNull(deliveries.openedAt)))
 }
 
 /** The campaign's clicked links, most clicked first. Each recipient counts once per link. */

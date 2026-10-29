@@ -18,22 +18,23 @@ import { contactCounts } from "../../worker/domain/contacts"
 import { listSenders } from "../../worker/domain/senders"
 
 export async function loader() {
-  const [campaigns, senders, counts] = await Promise.all([
-    listCampaigns(),
-    listSenders(),
-    contactCounts(),
-  ])
+  const [campaigns, senders] = await Promise.all([listCampaigns(), listSenders()])
+  // Only the getting-started steps need it, and counting reads every contact on each refresh.
+  const hasContacts =
+    campaigns.length === 0 && Object.values(await contactCounts()).some(Boolean)
   return {
     campaigns,
     hasSender: senders.some((sender) => sender.verified),
-    hasContacts: Object.values(counts).some(Boolean),
+    hasContacts,
   }
 }
 
 export default function CampaignsPage({ loaderData }: Route.ComponentProps) {
   const { campaigns, hasSender, hasContacts } = loaderData
+  // A refresh counts every campaign's deliveries.
+  const deliveries = campaigns.reduce((sum, campaign) => sum + campaign.counts.total, 0)
   const intervals = campaigns
-    .map(refreshInterval)
+    .map((campaign) => refreshInterval(campaign, deliveries))
     .filter((interval) => interval !== false)
   usePolling(intervals.length ? Math.min(...intervals) : false)
   const create = useCreateCampaign()
@@ -106,7 +107,7 @@ function CampaignRow({ campaign }: { campaign: Campaign }) {
               `, ${formatNumber(handedOff)} of ${formatNumber(campaign.counts.total)} sent`}
           </span>
         </div>
-        <CampaignStatusBadge status={campaign.status} />
+        <CampaignStatusBadge campaign={campaign} />
       </Link>
     </li>
   )

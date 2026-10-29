@@ -79,7 +79,9 @@ export function sesAccount(
       return {
         production: account.ProductionAccessEnabled ?? false,
         maxSendRate: account.SendQuota?.MaxSendRate ?? 1,
+        // -1 means no daily quota.
         max24HourSend: account.SendQuota?.Max24HourSend ?? 200,
+        sentLast24Hours: account.SendQuota?.SentLast24Hours ?? 0,
       }
     },
 

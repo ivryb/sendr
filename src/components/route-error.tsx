@@ -13,6 +13,11 @@ export function RouteError({ fullPage = false }: { fullPage?: boolean }) {
   const error = useRouteError()
   const revalidator = useRevalidator()
   const missing = isRouteErrorResponse(error) && error.status === 404
+  // A Workers Free limit (src/lib/admin.server.ts) says which one and when it resets.
+  const limit =
+    isRouteErrorResponse(error) && error.status === 503
+      ? (error.data as { message?: string } | null)?.message
+      : undefined
   const content = missing ? (
     <div className="flex flex-col items-start gap-4 py-16">
       <h1 className="text-xl font-semibold">This isn't here</h1>
@@ -27,6 +32,7 @@ export function RouteError({ fullPage = false }: { fullPage?: boolean }) {
     </div>
   ) : (
     <LoadError
+      message={limit}
       onRetry={() => revalidator.revalidate()}
       retrying={revalidator.state === "loading"}
     />

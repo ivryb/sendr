@@ -31,6 +31,7 @@ import {
   RATE_LIMITS,
   deliveryStats,
   engagementRate,
+  useStalled,
 } from "@/lib/campaign"
 import { formatNumber, formatPercent, plural, useDates } from "@/lib/format"
 import { useChange } from "@/lib/mutations"
@@ -102,6 +103,7 @@ export function CampaignDetail({
   footer: string
 }) {
   const { formatDateTime } = useDates()
+  const stalled = useStalled(campaign)
   const actions = CAMPAIGN_ACTIONS[campaign.status].filter(
     (action): action is RunAction => action !== "start"
   )
@@ -112,11 +114,17 @@ export function CampaignDetail({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 flex-col gap-2">
             <div className="flex items-center gap-2">
-              <CampaignStatusBadge status={campaign.status} />
-              {campaign.startedAt && (
-                <span className="text-xs text-muted-foreground">
-                  Started {formatDateTime(campaign.startedAt)}
+              <CampaignStatusBadge campaign={campaign} />
+              {stalled && campaign.progressAt ? (
+                <span className="text-xs text-amber-600 dark:text-amber-400">
+                  No progress since {formatDateTime(campaign.progressAt)}
                 </span>
+              ) : (
+                campaign.startedAt && (
+                  <span className="text-xs text-muted-foreground">
+                    Started {formatDateTime(campaign.startedAt)}
+                  </span>
+                )
               )}
             </div>
             <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">

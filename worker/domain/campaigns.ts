@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers"
-import { and, desc, eq, inArray, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm"
 import { z } from "zod"
 
 import {
@@ -13,12 +13,14 @@ import {
   type CampaignAction,
   type CampaignCounts,
   type CampaignStatus,
+  type DeliveryStatus,
 } from "../../shared/model"
 import { markdownToHtml } from "../../shared/render"
 import { db } from "../db/client"
-import { campaigns, deliveries } from "../db/schema"
+import { campaigns, deliveries, isQueued } from "../db/schema"
 import { DomainError } from "../lib/errors"
 import type { InstanceSettings } from "../lib/settings"
+import { contactCounts } from "./contacts"
 import { checkSender, defaultSender } from "./senders"
 
 export const campaignInput = z
@@ -56,19 +58,19 @@ export class CampaignError extends DomainError {
 export async function createCampaign(input: z.infer<typeof campaignInput>) {
   const senderId = input.senderId === undefined ? (await defaultSender())?.id : input.senderId
   const [row] = await db().insert(campaigns).values({ ...input, senderId }).returning()
-  return toCampaignDto(row, emptyCounts())
+  return toCampaignDto(row, emptySummary())
 }
 
 export async function listCampaigns(): Promise<Campaign[]> {
   const rows = await db().select().from(campaigns).orderBy(desc(campaigns.createdAt))
-  const counts = await deliveryCounts()
-  return rows.map((row) => toCampaignDto(row, counts.get(row.id) ?? emptyCounts()))
+  const summaries = await deliverySummaries()
+  return rows.map((row) => toCampaignDto(row, summaries.get(row.id) ?? emptySummary()))
 }
 
 export async function getCampaign(id: string): Promise<Campaign> {
   const row = await findCampaign(id)
-  const counts = await deliveryCounts(id)
-  return toCampaignDto(row, counts.get(id) ?? emptyCounts())
+  const summaries = await deliverySummaries(id)
+  return toCampaignDto(row, summaries.get(id) ?? emptySummary())
 }
 
 export async function updateDraft(id: string, input: z.infer<typeof campaignInput>) {
@@ -112,6 +114,15 @@ export async function startCampaign(id: string, settings: InstanceSettings) {
     throw new CampaignError(
       "not_ready",
       `${check.sender.email}'s SES account is still in the sandbox, so it only sends to addresses verified in SES. Request production access from its page in Senders, then start the campaign.`
+    )
+  }
+  // SES refuses everything past its 24-hour quota, so a bigger list would stall partway.
+  const { subscribed } = await contactCounts()
+  const left = Math.max(0, check.max24HourSend - check.sentLast24Hours)
+  if (check.max24HourSend >= 0 && subscribed > left) {
+    throw new CampaignError(
+      "not_ready",
+      `${check.sender.email}'s SES account can send ${left.toLocaleString("en-US")} more emails in the next 24 hours, and this campaign goes to ${subscribed.toLocaleString("en-US")} contacts. Ask AWS for a higher sending quota, or start it once the last day's emails leave the quota.`
     )
   }
 
@@ -158,7 +169,7 @@ export async function advanceCampaign(id: string) {
   const queued = await db()
     .select({ batch: deliveries.batch, count: sql<number>`count(*)` })
     .from(deliveries)
-    .where(and(eq(deliveries.campaignId, id), eq(deliveries.status, "queued")))
+    .where(and(eq(deliveries.campaignId, id), isQueued))
     .groupBy(deliveries.batch)
   const remaining = (name: "first" | "rest") =>
     queued.find((row) => row.batch === name)?.count ?? 0
@@ -209,39 +220,49 @@ async function transition(
   return updated.length > 0
 }
 
-/** Counts for one campaign, or for all of them (the list never binds a growing ID list). */
-async function deliveryCounts(campaignId?: string) {
-  const counts = new Map<string, CampaignCounts>()
+type DeliverySummary = { counts: CampaignCounts; lastSentAt: Date | null }
+
+const statusCounts = Object.fromEntries(
+  DELIVERY_STATUSES.map((status) => [status, sql<number>`sum(${deliveries.status} = ${status})`])
+) as Record<DeliveryStatus, SQL<number>>
+
+/**
+ * Counts for one campaign, or for all of them (the list never binds a growing ID list). One
+ * pass over the deliveries: grouping by status as well makes D1 read every row twice.
+ */
+async function deliverySummaries(campaignId?: string) {
   const rows = await db()
     .select({
       campaignId: deliveries.campaignId,
-      status: deliveries.status,
-      count: sql<number>`count(*)`,
+      lastSentAt: sql<Date | null>`max(${deliveries.sentAt})`.mapWith(deliveries.sentAt),
+      total: sql<number>`count(*)`,
       opened: sql<number>`count(${deliveries.openedAt})`,
       clicked: sql<number>`count(${deliveries.clickedAt})`,
+      ...statusCounts,
     })
     .from(deliveries)
     .where(campaignId ? eq(deliveries.campaignId, campaignId) : undefined)
-    .groupBy(deliveries.campaignId, deliveries.status)
-  for (const row of rows) {
-    const entry = counts.get(row.campaignId) ?? emptyCounts()
-    entry[row.status] = row.count
-    entry.total += row.count
-    entry.opened += row.opened
-    entry.clicked += row.clicked
-    counts.set(row.campaignId, entry)
-  }
-  return counts
+    .groupBy(deliveries.campaignId)
+  return new Map<string, DeliverySummary>(
+    rows.map(({ campaignId, lastSentAt, ...counts }) => [campaignId, { counts, lastSentAt }])
+  )
 }
 
-function emptyCounts(): CampaignCounts {
-  return Object.assign(
+function emptySummary(): DeliverySummary {
+  const counts = Object.assign(
     { total: 0, opened: 0, clicked: 0 },
     Object.fromEntries(DELIVERY_STATUSES.map((status) => [status, 0]))
   ) as CampaignCounts
+  return { counts, lastSentAt: null }
 }
 
-function toCampaignDto(row: typeof campaigns.$inferSelect, counts: CampaignCounts): Campaign {
+function toCampaignDto(
+  row: typeof campaigns.$inferSelect,
+  { counts, lastSentAt }: DeliverySummary
+): Campaign {
+  // Only transitions update a started campaign, so updatedAt is when it started or was approved.
+  const progressAt =
+    row.startedAt && new Date(Math.max(row.updatedAt.getTime(), lastSentAt?.getTime() ?? 0))
   return {
     id: row.id,
     subject: row.subject,
@@ -253,6 +274,7 @@ function toCampaignDto(row: typeof campaigns.$inferSelect, counts: CampaignCount
     createdAt: row.createdAt.toISOString(),
     startedAt: row.startedAt?.toISOString() ?? null,
     finishedAt: row.finishedAt?.toISOString() ?? null,
+    progressAt: progressAt?.toISOString() ?? null,
     counts,
   }
 }

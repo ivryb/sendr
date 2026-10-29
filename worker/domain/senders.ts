@@ -100,6 +100,7 @@ export async function checkSender(id: string) {
       domain,
       records: dnsRecords(domain, row.region, identity),
       max24HourSend: account.max24HourSend,
+      sentLast24Hours: account.sentLast24Hours,
       maxSendRate: account.maxSendRate,
     }
   } catch (error) {
@@ -146,7 +147,12 @@ export async function defaultSender() {
 
 /** Delivery reports for any sender in this AWS account have arrived, or AWS confirmed them. */
 export async function markEventsConnected(topicArn: string) {
-  await db().update(senders).set({ eventsConnected: true }).where(eq(senders.eventsTopicArn, topicArn))
+  // Runs on every delivery report; rewriting a connected sender would cost a D1 row written
+  // per recipient against Workers Free's 100,000 a day.
+  await db()
+    .update(senders)
+    .set({ eventsConnected: true })
+    .where(and(eq(senders.eventsTopicArn, topicArn), eq(senders.eventsConnected, false)))
 }
 
 /** The campaign's sender, or null when it has none. */

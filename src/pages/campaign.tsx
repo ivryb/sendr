@@ -11,19 +11,21 @@ import { campaignLinks } from "../../worker/domain/tracking"
 import { getSettings } from "../../worker/lib/settings"
 
 export async function loader({ params }: Route.LoaderArgs) {
-  const [campaign, links, settings, senders, counts] = await Promise.all([
-    orNotFound(getCampaign(params.id)),
-    campaignLinks(params.id),
+  const campaign = await orNotFound(getCampaign(params.id))
+  // Counting subscribers reads every contact, and listing links every delivery, on each
+  // refresh, so they're only read when the page shows them.
+  const [links, settings, senders, counts] = await Promise.all([
+    campaign.counts.clicked > 0 ? campaignLinks(params.id) : [],
     getSettings(),
     listSenders(),
-    contactCounts(),
+    campaign.status === "draft" ? contactCounts() : null,
   ])
   return {
     campaign,
     links,
     senders,
     footer: settings.footer,
-    subscribed: counts.subscribed,
+    subscribed: counts?.subscribed ?? 0,
   }
 }
 

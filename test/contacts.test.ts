@@ -167,16 +167,16 @@ describe("bulk import", () => {
     expect((await listContacts())[0].status).toBe("unsubscribed")
   })
 
-  it("imports 1,000 contacts in one call", async () => {
-    const contacts = Array.from({ length: 1000 }, (_, i) => ({ email: `user${i}@example.com` }))
+  it("imports 250 contacts in one call", async () => {
+    const contacts = Array.from({ length: 250 }, (_, i) => ({ email: `user${i}@example.com` }))
     const response = await importContacts(contacts)
     expect(response.status).toBe(200)
     const counts = await request("/api/v1/contacts?limit=1", { cookie: admin })
-    expect((await counts.json<{ total: number }>()).total).toBe(1000)
+    expect((await counts.json<{ total: number }>()).total).toBe(250)
   })
 
-  it("refuses more than 1,000 contacts in one call", async () => {
-    const contacts = Array.from({ length: 1001 }, (_, i) => ({ email: `user${i}@example.com` }))
+  it("refuses more than 250 contacts in one call", async () => {
+    const contacts = Array.from({ length: 251 }, (_, i) => ({ email: `user${i}@example.com` }))
     expect((await importContacts(contacts)).status).toBe(400)
   })
 

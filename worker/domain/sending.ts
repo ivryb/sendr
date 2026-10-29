@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm"
 
 import { renderEmail, sampleRecipient } from "../../shared/render"
 import { db } from "../db/client"
-import { contacts, deliveries } from "../db/schema"
+import { contacts, deliveries, isQueued } from "../db/schema"
 import { PermanentSendError, type EmailProvider } from "../email/provider"
 import { senderProvider } from "../email/providers"
 import { signToken } from "../lib/crypto"
@@ -15,7 +15,11 @@ import { trackEmail } from "./tracking"
 export const UNSUBSCRIBE_PURPOSE = "unsubscribe"
 export const TEST_UNSUBSCRIBE_TOKEN = "test"
 
-const DELIVERIES_PER_MESSAGE = 100
+// Workers Free allows 50 D1 queries and 50 subrequests (fetches and D1 queries together) per
+// invocation. Past that, the write after a send throws once SES has accepted the email, and
+// the whole message reruns and resends. 15 deliveries take 4 setup queries, 15 SES fetches,
+// 15 writes and 3 queries to move on: 37, with room for the queue send.
+const DELIVERIES_PER_MESSAGE = 15
 
 /**
  * Queue consumer: sends the campaign's next queued deliveries at the provider's pace, then
@@ -24,7 +28,12 @@ const DELIVERIES_PER_MESSAGE = 100
  * finds deliveries that are still queued.
  */
 export async function processSendMessage({ campaignId }: SendMessage) {
-  const campaign = await findCampaign(campaignId).catch(() => null)
+  // Only a deleted campaign ends the chain of messages. Any other error, like a brief D1
+  // outage, retries the message: acknowledging it would stop the campaign silently.
+  const campaign = await findCampaign(campaignId).catch((error) => {
+    if (error instanceof CampaignError && error.code === "not_found") return null
+    throw error
+  })
   if (campaign?.status !== "first_batch" && campaign?.status !== "sending") return
 
   const settings = await getSettings()
@@ -40,7 +49,7 @@ export async function processSendMessage({ campaignId }: SendMessage) {
       and(
         eq(deliveries.campaignId, campaignId),
         eq(deliveries.batch, campaign.status === "first_batch" ? "first" : "rest"),
-        eq(deliveries.status, "queued")
+        isQueued
       )
     )
     .limit(DELIVERIES_PER_MESSAGE)
@@ -128,9 +137,12 @@ function markDelivery(id: string, values: Partial<typeof deliveries.$inferInsert
   return db().update(deliveries).set(values).where(eq(deliveries.id, id))
 }
 
-/** Spaces sends so the provider's rate limit is never exceeded. */
+// Login codes and single emails through the API share the SES rate while a campaign sends.
+const CAMPAIGN_SHARE_OF_RATE = 0.8
+
+/** Spaces sends to 80% of the provider's rate limit, leaving the rest to the other emails. */
 function pacer(provider: EmailProvider) {
-  const interval = 1000 / provider.maxSendsPerSecond
+  const interval = 1000 / (provider.maxSendsPerSecond * CAMPAIGN_SHARE_OF_RATE)
   let next = 0
   return async () => {
     const wait = next - Date.now()
