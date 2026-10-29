@@ -206,6 +206,18 @@ describe("provider events", () => {
     expect(await contactStatus("ann@example.com")).toBe("bounced")
   })
 
+  it("a contact taking over an opt-out left at an address keeps the campaign's counts", async () => {
+    const id = await sendCampaign()
+    await request(unsubscribePath("ann@example.com"), { method: "POST" })
+    await request("/api/v1/contacts/u1", { method: "DELETE", bearer: apiKey })
+    expect((await changeEmail("u2", "ann@example.com")).status).toBe(200)
+
+    const response = await request("/api/v1/contacts?q=ann@example.com", { cookie: admin })
+    const { contacts } = await response.json<{ contacts: Contact[] }>()
+    expect(contacts).toMatchObject([{ externalId: "u2", status: "unsubscribed" }])
+    expect((await getCampaign(id)).counts).toMatchObject({ sent: 2 })
+  })
+
   it("a receipt bouncing after an unsubscribe keeps the opt-out, even at a new address", async () => {
     await request("/api/v1/contacts/u1", {
       method: "PUT",

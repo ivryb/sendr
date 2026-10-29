@@ -121,7 +121,7 @@ curl -X DELETE https://emails.example.com/api/v1/contacts/user_123 -H "Authoriza
 - New contacts start subscribed. Pass `"unsubscribed": true` to import someone who already opted out.
 - To import a list from another tool, leave out `externalId`: the batch call matches those contacts by email, and your app's later calls with a user ID attach to them.
 - Updating a contact never resubscribes it. Only the recipient (from the unsubscribe page) or an admin can.
-- Deleting someone who unsubscribed, bounced or complained keeps their address on file, so adding them back keeps them opted out.
+- Deleting someone who unsubscribed, bounced or complained, or changing their email, keeps the old address on file, so a contact added at it or moving back to it stays opted out.
 - An email that already belongs to another contact is rejected with `409`. Every call is safe to repeat, so rerunning a full backfill repairs any drift.
 
 ### Send single emails

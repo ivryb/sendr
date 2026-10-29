@@ -23,8 +23,9 @@ export type UpsertResult = { ok: true } | { ok: false; error: "email_taken" }
 type ContactRow = typeof contacts.$inferSelect
 
 /** D1 binds at most 100 parameters per statement. */
-const LOOKUP_CHUNK = 50
-const INSERT_CHUNK = Math.floor(100 / Object.keys(getTableColumns(contacts)).length)
+const MAX_PARAMETERS = 100
+const LOOKUP_CHUNK = MAX_PARAMETERS / 2
+const INSERT_CHUNK = Math.floor(MAX_PARAMETERS / Object.keys(getTableColumns(contacts)).length)
 
 /**
  * Adds or updates contacts in order, in a few queries: Workers Free allows 50 D1 queries per
@@ -43,14 +44,13 @@ type Index = {
   created: Set<ContactRow>
   changed: Set<ContactRow>
   statusChanged: Set<ContactRow>
+  deleted: Set<ContactRow>
 }
 
 async function loadIndex(batch: ContactUpsert[]): Promise<Index> {
-  const chunks = []
-  for (let i = 0; i < batch.length; i += LOOKUP_CHUNK) chunks.push(batch.slice(i, i + LOOKUP_CHUNK))
   const database = db()
   const rows = await Promise.all(
-    chunks.map((chunk) => {
+    chunked(batch, LOOKUP_CHUNK).map((chunk) => {
       const externalIds = chunk.flatMap((item) => (item.externalId ? [item.externalId] : []))
       return database
         .select()
@@ -69,6 +69,7 @@ async function loadIndex(batch: ContactUpsert[]): Promise<Index> {
     created: new Set(),
     changed: new Set(),
     statusChanged: new Set(),
+    deleted: new Set(),
   }
   for (const row of rows.flat()) addToIndex(index, row)
   return index
@@ -79,36 +80,49 @@ function addToIndex(index: Index, row: ContactRow) {
   if (row.externalId) index.byExternalId.set(row.externalId, row)
 }
 
+// When two statuses meet at one address, the stricter stays. An unsubscribe outranks a bounce
+// because it must survive the contact's next move, which clears a bounce.
+const STRICTNESS: Record<ContactStatus, number> = {
+  subscribed: 0,
+  bounced: 1,
+  unsubscribed: 2,
+  complained: 3,
+}
+
 function applyUpsert(index: Index, { externalId, ...input }: ContactUpsert): UpsertResult {
   const byEmail = index.byEmail.get(input.email)
   const existing = (externalId && index.byExternalId.get(externalId)) || byEmail
-  // An address held by another contact stays theirs, even one imported without a user ID: moving
-  // a user onto it would break the unique email.
+  // An opt-out left behind at an address belongs to no one, so a contact moving there takes it
+  // over: usually the same person moving back from a typo, who would otherwise be locked out.
+  const left = byEmail && byEmail !== existing && isLeftBehind(byEmail) ? byEmail : undefined
+  // Any other address held by another contact stays theirs, even one imported without a user
+  // ID: moving a user onto it would break the unique email.
   const taken =
     byEmail &&
+    !left &&
     (byEmail !== existing || (externalId && byEmail.externalId && byEmail.externalId !== externalId))
   if (taken) return { ok: false, error: "email_taken" }
 
+  const now = new Date()
   const moves = existing && existing.email !== input.email
   // A bounce belongs to the address, so a corrected email can get mail again. Unsubscribes and
-  // complaints belong to the person and stay.
-  const newAddress = moves && existing.status === "bounced"
-  const status: ContactStatus | undefined =
-    input.unsubscribed && (!existing || existing.status === "subscribed" || newAddress)
-      ? "unsubscribed"
-      : newAddress
-        ? "subscribed"
-        : undefined
+  // complaints belong to the person and stay. A bounce left at the address they move to stays
+  // too, since that address bounced.
+  const fresh = { status: "subscribed", statusChangedAt: now } as const
+  const kept = !existing || (moves && existing.status === "bounced") ? fresh : existing
+  const merged = left && STRICTNESS[left.status] > STRICTNESS[kept.status] ? left : kept
+  const optOut = input.unsubscribed && merged.status === "subscribed"
+  const { status, statusChangedAt } = optOut ? { status: "unsubscribed", statusChangedAt: now } : merged
 
-  const now = new Date()
+  if (left) dropRow(index, left)
   if (moves) leaveAddress(index, existing, now)
   const row = existing ?? newRow(input.email, now)
   row.email = input.email
   if (externalId) row.externalId = externalId
   if (input.firstName !== undefined) row.firstName = input.firstName
   if (input.fields) row.fields = input.fields
-  if (status) {
-    Object.assign(row, { status, statusChangedAt: now })
+  if (status !== row.status) {
+    Object.assign(row, { status, statusChangedAt })
     index.statusChanged.add(row)
   }
   addToIndex(index, row)
@@ -144,10 +158,30 @@ function leaveAddress(index: Index, contact: ContactRow, now: Date) {
   index.created.add(detached)
 }
 
-/** Updates run first, so an address an existing contact moved away from is free to insert. */
-async function save({ created, changed, statusChanged }: Index) {
+/** A row that only keeps an opt-out at its address, as `leaveAddress` and `deleteContact` leave it. */
+function isLeftBehind(row: ContactRow) {
+  return !row.externalId && row.status !== "subscribed"
+}
+
+/** Takes a row out of the call; one already stored is deleted. */
+function dropRow(index: Index, row: ContactRow) {
+  index.byEmail.delete(row.email)
+  index.changed.delete(row)
+  index.statusChanged.delete(row)
+  if (!index.created.delete(row)) index.deleted.add(row)
+}
+
+/**
+ * Deletes run first and updates next, so the address of a row taken over, or one an existing
+ * contact moved away from, is free to use. A deleted row's deliveries stay in campaign counts
+ * without a contact, as for `deleteContact`.
+ */
+async function save({ created, changed, statusChanged, deleted }: Index) {
   const database = db()
   const statements: BatchItem<"sqlite">[] = []
+  for (const rows of chunked([...deleted], MAX_PARAMETERS)) {
+    statements.push(database.delete(contacts).where(inArray(contacts.id, rows.map((row) => row.id))))
+  }
   for (const row of changed) {
     if (created.has(row)) continue
     const { id, externalId, email, firstName, fields, status, statusChangedAt } = row
@@ -161,12 +195,17 @@ async function save({ created, changed, statusChanged }: Index) {
         .where(eq(contacts.id, id))
     )
   }
-  const inserts = [...created]
-  for (let i = 0; i < inserts.length; i += INSERT_CHUNK) {
-    statements.push(database.insert(contacts).values(inserts.slice(i, i + INSERT_CHUNK)))
+  for (const rows of chunked([...created], INSERT_CHUNK)) {
+    statements.push(database.insert(contacts).values(rows))
   }
   const [first, ...rest] = statements
   if (first) await database.batch([first, ...rest])
+}
+
+function chunked<T>(items: T[], size: number) {
+  const chunks: T[][] = []
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size))
+  return chunks
 }
 
 /**

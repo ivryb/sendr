@@ -79,6 +79,15 @@ describe("contacts API", () => {
     )
   })
 
+  it("a contact moving back to its old address takes back the opt-out it left there", async () => {
+    expect((await upsert("u1", { email: "ann@example.com", unsubscribed: true })).status).toBe(200)
+    expect((await upsert("u1", { email: "ann@exmaple.com" })).status).toBe(200)
+    expect((await upsert("u1", { email: "ann@example.com" })).status).toBe(200)
+
+    const atAnn = (await listContacts()).filter((contact) => contact.email === "ann@example.com")
+    expect(atAnn).toMatchObject([{ externalId: "u1", status: "unsubscribed" }])
+  })
+
   it("rejects an email that belongs to another user", async () => {
     await upsert("u1", { email: "ann@example.com" })
     const response = await upsert("u2", { email: "ann@example.com" })
