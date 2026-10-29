@@ -23,6 +23,19 @@ export function createAuth(settings: InstanceSettings, requestUrl: string) {
     secret: settings.secret,
     database: drizzleAdapter(db(), { provider: "sqlite", schema }),
     emailAndPassword: { enabled: false },
+    // Sign-in is the only use for a code, and the only endpoint that spends a guess atomically.
+    // check-verification-otp reads, compares and counts in separate steps, so guesses sent
+    // together all go uncounted, and it confirms the right code without using it up. The
+    // password and email-change ones would take guesses and send codes past the hourly cap.
+    disabledPaths: [
+      "/email-otp/check-verification-otp",
+      "/email-otp/verify-email",
+      "/email-otp/request-password-reset",
+      "/forget-password/email-otp",
+      "/email-otp/reset-password",
+      "/email-otp/request-email-change",
+      "/email-otp/change-email",
+    ],
     plugins: [
       passkey({ rpID: new URL(origin).hostname, rpName: "Sendr", origin }),
       emailOTP({
