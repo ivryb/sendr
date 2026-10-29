@@ -91,6 +91,16 @@ export type Campaign = {
   finishedAt: string | null
   /** While it sends, when it last moved on: its latest email, or its start or approval. */
   progressAt: string | null
+  /**
+   * Its counts may still change: it's sending, or its last email went out within the hour and
+   * delivery reports may still arrive. Decided when the campaign was read, like `stalled`.
+   */
+  live: boolean
+  /**
+   * Sending, but no progress for 5 minutes: its queue message ran out of retries, or a daily
+   * limit paused it.
+   */
+  stalled: boolean
   counts: CampaignCounts
 }
 

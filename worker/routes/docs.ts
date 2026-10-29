@@ -113,7 +113,9 @@ Statuses: draft, first_batch, awaiting_approval, sending, sent, cancelled.
 
 - \`GET /campaigns\`, \`GET /campaigns/{id}\` (with delivery \`counts\`). \`GET /campaigns/{id}\`
   also returns \`links\`: \`[{ "url", "clicks" }]\`, most clicked first. While a campaign sends,
-  \`progressAt\` is when it last moved on; if it's more than a few minutes old, sending has stalled.
+  \`progressAt\` is when it last moved on, and \`stalled\` is true once it hasn't for 5 minutes.
+  \`live\` is true while its counts may still change: while it sends, and for an hour after its last
+  email.
 - \`POST /campaigns\` with \`{ "subject"?, "format"?, "body"?, "senderId"?, "firstBatchSize"? }\` (or
   \`markdown\` instead of \`format\` and \`body\`) creates a draft. Without \`senderId\` it uses the first
   verified sender, or the first sender while none is.

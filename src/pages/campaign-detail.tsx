@@ -31,7 +31,6 @@ import {
   RATE_LIMITS,
   deliveryStats,
   engagementRate,
-  useStalled,
 } from "@/lib/campaign"
 import { formatNumber, formatPercent, plural, useDates } from "@/lib/format"
 import { useChange } from "@/lib/mutations"
@@ -103,7 +102,6 @@ export function CampaignDetail({
   footer: string
 }) {
   const { formatDateTime } = useDates()
-  const stalled = useStalled(campaign)
   const actions = CAMPAIGN_ACTIONS[campaign.status].filter(
     (action): action is RunAction => action !== "start"
   )
@@ -115,7 +113,7 @@ export function CampaignDetail({
           <div className="flex min-w-0 flex-col gap-2">
             <div className="flex items-center gap-2">
               <CampaignStatusBadge campaign={campaign} />
-              {stalled && campaign.progressAt ? (
+              {campaign.stalled && campaign.progressAt ? (
                 <span className="text-xs text-amber-600 dark:text-amber-400">
                   No progress since {formatDateTime(campaign.progressAt)}
                 </span>

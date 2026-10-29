@@ -335,6 +335,31 @@ describe("within Cloudflare's limits", () => {
     expect(sentEmails()).toHaveLength(0)
   })
 
+  /** Moves the clock the campaign is read with, as if the admin app refreshed `ms` later. */
+  function later(ms: number) {
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + ms })
+    onTestFinished(() => void vi.useRealTimers())
+  }
+
+  it("a send with no progress for 5 minutes shows as stalled", async () => {
+    const id = await startHeld(3)
+    expect(await campaign(id)).toMatchObject({ live: true, stalled: false })
+    later(6 * 60_000)
+    expect(await campaign(id)).toMatchObject({ live: true, stalled: true })
+  })
+
+  it("a finished campaign stops refreshing an hour after its last email", async () => {
+    const id = await startHeld(3)
+    await deliver(id)
+    expect(await campaign(id)).toMatchObject({ status: "sent", live: true, stalled: false })
+    later(61 * 60_000)
+    expect(await campaign(id)).toMatchObject({ live: false, stalled: false })
+  })
+
+  it("a draft never refreshes", async () => {
+    expect(await newCampaign()).toMatchObject({ live: false, stalled: false })
+  })
+
   it("the API says which Workers Free limit was hit and when it resets", async () => {
     failQueries(READ_LIMIT)
     const response = await request("/api/v1/campaigns", { cookie: admin })

@@ -256,13 +256,24 @@ function emptySummary(): DeliverySummary {
   return { counts, lastSentAt: null }
 }
 
+// Delivery reports mostly arrive within the hour after an email; an open page then stops
+// refreshing, since each refresh reads every delivery and Workers Free allows 5 million a day.
+const REPORTS_WITHIN = 60 * 60_000
+// The queue retries a failing message for about ten minutes before it gives up.
+const STALLED_AFTER = 5 * 60_000
+
 function toCampaignDto(
   row: typeof campaigns.$inferSelect,
   { counts, lastSentAt }: DeliverySummary
 ): Campaign {
-  // Only transitions update a started campaign, so updatedAt is when it started or was approved.
+  // Only transitions update a started campaign, so updatedAt is when it started, was approved,
+  // or finished.
   const progressAt =
     row.startedAt && new Date(Math.max(row.updatedAt.getTime(), lastSentAt?.getTime() ?? 0))
+  const sending = row.status === "first_batch" || row.status === "sending"
+  // Decided here rather than in the browser, whose data can be old: a hidden tab, or a slow
+  // refresh of a big campaign.
+  const quietFor = progressAt ? Date.now() - progressAt.getTime() : Infinity
   return {
     id: row.id,
     subject: row.subject,
@@ -275,6 +286,8 @@ function toCampaignDto(
     startedAt: row.startedAt?.toISOString() ?? null,
     finishedAt: row.finishedAt?.toISOString() ?? null,
     progressAt: progressAt?.toISOString() ?? null,
+    live: sending || quietFor < REPORTS_WITHIN,
+    stalled: sending && quietFor > STALLED_AFTER,
     counts,
   }
 }
