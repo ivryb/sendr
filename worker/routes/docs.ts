@@ -10,7 +10,8 @@ Sendr sends marketing campaigns and single emails through Amazon SES, and keeps 
 list they go to. Everything the admin app does is available here.
 
 Base URL: ${api}
-Auth: \`Authorization: Bearer <api key>\`. The admin creates keys in Sendr under API.
+Auth: \`Authorization: Bearer <api key>\`. The admin creates keys in Sendr under API. Any other
+\`Authorization\` scheme gets \`401\`.
 Bodies and responses are JSON. Errors look like \`{ "error": "code", "message": "readable reason" }\`;
 validation errors add \`issues\` with the field paths.
 
@@ -129,14 +130,14 @@ records the open. \`counts.opened\` and \`counts.clicked\` are recipients who op
 least once (a click counts as an open), and each link's \`clicks\` counts each recipient once.
 Apple Mail Privacy Protection preloads images, so opens are an overestimate and clicks are the
 reliable signal. Text campaigns have no image, so only their clicks count. Test sends and single
-emails aren't tracked.
+emails aren't tracked, and neither are links whose domain comes from a merge tag.
 
 ## Media (full permission)
 
 Images, GIFs, video and audio for campaigns, stored by the instance and served from public URLs.
 
 - \`POST /media?name=<file name>\` with the file's bytes as the body (not a form) and its MIME type
-  as \`Content-Type\`: \`image/*\` (not SVG), \`video/*\` or \`audio/*\`, else \`415\`. Up to 100 MB (\`413\`);
+  as \`Content-Type\`, one type like \`image/png\`: \`image/*\` (not SVG), \`video/*\` or \`audio/*\`, else \`415\`. Up to 100 MB (\`413\`);
   \`Content-Length\` is required (\`411\`). Optional \`poster=<image media id>\` (a video's or audio's
   cover) and \`duration=<seconds>\`. Returns 201 with \`{ "media": { "id", "kind", "url", "posterUrl",
   "durationSeconds", ... } }\`.
