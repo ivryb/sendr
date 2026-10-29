@@ -73,7 +73,9 @@ describe("media", () => {
     const served = await request(pathOf(image.url))
     expect(served.headers.get("content-type")).toBe("image/png")
     expect(served.headers.get("x-content-type-options")).toBe("nosniff")
-    expect(served.headers.get("content-security-policy")).toBe("sandbox")
+    // Without allow-same-origin, Chromium's player never loads a video or audio opened directly,
+    // which is how email cards link to them. Scripts stay blocked either way.
+    expect(served.headers.get("content-security-policy")).toBe("sandbox allow-same-origin")
   })
 
   it("a video can reference an uploaded poster", async () => {

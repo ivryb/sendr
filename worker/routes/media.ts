@@ -23,9 +23,11 @@ export const media = new Hono().get("/:id/:name", async (c) => {
   })
   object.writeHttpMetadata(headers)
   // Media shares the admin app's origin: opened directly, a file must never run as a page there.
-  // Neither header changes how it shows in an <img>, <video> or <audio>.
+  // Neither header changes how it shows in an <img>, <video> or <audio>. Email cards open video
+  // and audio directly, and Chromium's player never loads in a plain sandbox, so the sandbox
+  // keeps the origin; without allow-scripts, nothing in it can run script.
   headers.set("x-content-type-options", "nosniff")
-  headers.set("content-security-policy", "sandbox")
+  headers.set("content-security-policy", "sandbox allow-same-origin")
   // A matching If-None-Match: the caller's copy is current.
   if (!("body" in object)) return new Response(null, { status: 304, headers })
   const range = rangeHeader ? object.range : undefined
