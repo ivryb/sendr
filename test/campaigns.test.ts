@@ -408,6 +408,36 @@ describe("tracking clicks and opens", () => {
     expect((await report(id)).campaign.counts.opened).toBe(1)
   })
 
+  it("only links written in the campaign are tracked, not ones a contact's data brings in", async () => {
+    await request("/api/v1/contacts/mallory", {
+      method: "PUT",
+      bearer: apiKey,
+      json: {
+        email: "mallory@example.com",
+        firstName: "https://evil.example/login",
+        fields: { site: "https://evil.example/site", host: "evil.example" },
+      },
+    })
+    const send = async (body: Record<string, unknown>) => {
+      sentEmails().length = 0
+      const { id } = await newCampaign({ markdown: undefined, ...body })
+      await act(id, "start")
+      await reachStatus(id, "sent")
+      return sentEmails()[0]
+    }
+
+    const text = await send({ format: "text", body: "Hi {{first_name}}, news at https://acme.com/news" })
+    expect(text.text).toMatch(/^Hi https:\/\/evil\.example\/login, news at https:\/\/sendr\.test\/c\//)
+
+    const html = await send({
+      format: "html",
+      body: '<p><a href="{{fields.site}}">Yours</a> <a href="https://{{fields.host}}/x">Host</a> <a href="https://acme.com/news">News</a> {{first_name}}</p>',
+    })
+    expect(html.html).toContain('<a href="https://evil.example/site">Yours</a>')
+    expect(html.html).toContain('<a href="https://evil.example/x">Host</a>')
+    expect(html.html).toMatch(/<a href="https:\/\/sendr\.test\/c\/[^"]+">News<\/a> https:\/\/evil\.example\/login/)
+  })
+
   it("a tampered click link can't redirect anywhere else", async () => {
     await sendTracked()
     const [docs] = clickLinks(emailTo("reader0@example.com").html)

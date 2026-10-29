@@ -13,8 +13,14 @@ type Recipient = { firstName: string | null; fields: Record<string, string> }
 /** The footer from settings (Markdown), and the recipient and their unsubscribe link. */
 type Delivery = { footer: string; recipient: Recipient; unsubscribeUrl: string }
 
-/** `html` is null for a text campaign, which is sent without an HTML part. */
-export type RenderedEmail = { subject: string; html: string | null; text: string }
+type Parts = { html: string | null; text: string }
+
+/**
+ * `html` is null for a text campaign, which is sent without an HTML part. `template` is both
+ * parts before merge tags are filled in, so tracking can tell the campaign's own links from
+ * ones that came in with contact data.
+ */
+export type RenderedEmail = Parts & { subject: string; template: Parts }
 
 /** The footer from settings (Markdown) with the recipient's unsubscribe link. */
 type Footer = { markdown: string; unsubscribeUrl: string }
@@ -53,10 +59,12 @@ export function renderEmail(campaign: CampaignContent, delivery: Delivery): Rend
 
   const footer = { markdown: delivery.footer, unsubscribeUrl: delivery.unsubscribeUrl }
   const html = HTML_PART[campaign.format](campaign.body, campaign.subject, footer)
+  const text = withFooterText(bodyToText(campaign.format, campaign.body), footer)
   return {
     subject: merge(campaign.subject, plain),
     html: html && merge(html, escapeHtml),
-    text: merge(withFooterText(bodyToText(campaign.format, campaign.body), footer), plain),
+    text: merge(text, plain),
+    template: { html, text },
   }
 }
 

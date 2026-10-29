@@ -2,6 +2,7 @@ import { desc, eq, sql } from "drizzle-orm"
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core"
 
 import type { CampaignLink } from "../../shared/model"
+import type { RenderedEmail } from "../../shared/render"
 import { db } from "../db/client"
 import { clicks, deliveries } from "../db/schema"
 import { decodeBase64Url, encodeBase64Url, signToken, verifyToken } from "../lib/crypto"
@@ -24,19 +25,14 @@ type Delivery = { settings: InstanceSettings; deliveryId: string; unsubscribeUrl
  * counts the open. The unsubscribe link keeps its real URL, and so does the plain-text part of
  * an HTML email. A text-only email has no pixel, so only its clicks count.
  */
-export async function trackEmail<T extends { html: string | null; text: string }>(
-  email: T,
-  delivery: Delivery
-): Promise<T> {
-  const { html, text } = email
-  if (html === null) {
-    const tracked = await clickUrls(Array.from(text.matchAll(BARE_URL), ([url]) => url), delivery)
-    return { ...email, text: text.replace(BARE_URL, (url) => tracked.get(url) ?? url) }
-  }
+export async function trackEmail({ template, ...email }: RenderedEmail, delivery: Delivery) {
+  const written = writtenLinks(links(template))
   const tracked = await clickUrls(
-    Array.from(html.matchAll(LINK), (match) => decodeEntities(match[3])),
+    links(email).filter((url) => written.some((link) => link.test(url))),
     delivery
   )
+  const { html, text } = email
+  if (html === null) return { ...email, text: text.replace(BARE_URL, (url) => tracked.get(url) ?? url) }
   const { settings, deliveryId } = delivery
   const openToken = await signToken(settings.secret, OPEN_PURPOSE, deliveryId)
   const pixel = `<img src="${settings.publicUrl}/o/${openToken}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;">`
@@ -47,6 +43,23 @@ export async function trackEmail<T extends { html: string | null; text: string }
     })
     .replace(/<\/body\s*>/i, (end) => `${pixel}\n${end}`)
   return { ...email, html: trackedHtml }
+}
+
+/** The links tracking wraps: hrefs in HTML, or the bare URLs of a text-only email. */
+function links({ html, text }: { html: string | null; text: string }) {
+  if (html === null) return text.match(BARE_URL) ?? []
+  return Array.from(html.matchAll(LINK), (match) => decodeEntities(match[3]))
+}
+
+/**
+ * The campaign's own links, as patterns a sent link must match to be tracked. A merge tag
+ * matches anything, but only after the host, so a contact whose name is a URL, or whose field
+ * fills a whole link, can't get a signed redirect to wherever they like.
+ */
+function writtenLinks(urls: string[]) {
+  return urls
+    .filter((url) => !/^https?:\/\/[^/?#]*\{\{/i.test(url))
+    .map((url) => new RegExp(`^${url.split(/\{\{.*?\}\}/).map(escapeRegExp).join(".*")}$`))
 }
 
 /** Each URL's /c link, except the unsubscribe link's. */
@@ -119,6 +132,10 @@ function clickPayload(deliveryId: string, url: string) {
 /** Keeps the first time, so repeat opens and clicks don't move it. */
 function firstTime(column: AnySQLiteColumn) {
   return sql`coalesce(${column}, ${Date.now()})`
+}
+
+function escapeRegExp(text: string) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 function decodeEntities(value: string) {
