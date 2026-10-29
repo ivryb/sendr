@@ -2,9 +2,9 @@ import { passkey } from "@better-auth/passkey"
 import { env, waitUntil } from "cloudflare:workers"
 import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
-import { APIError } from "better-auth/api"
+import { APIError, createAuthMiddleware } from "better-auth/api"
 import { emailOTP } from "better-auth/plugins"
-import { desc, eq } from "drizzle-orm"
+import { desc, eq, sql } from "drizzle-orm"
 
 import { db } from "./db/client"
 import * as schema from "./db/schema"
@@ -26,13 +26,21 @@ export function createAuth(settings: InstanceSettings, requestUrl: string) {
     plugins: [
       passkey({ rpID: new URL(origin).hostname, rpName: "Sendr", origin }),
       emailOTP({
-        sendVerificationOTP: async ({ email, otp }) => {
+        sendVerificationOTP: async ({ email, otp, type }) => {
+          // Only sign-in codes are of use here. Password reset requests would otherwise email
+          // codes past the cap on sign-in codes.
+          if (type !== "sign-in") return
           // Both lookups run for every address, so response timing doesn't reveal admins.
           const [allowed, sender] = await Promise.all([canSignIn(email), defaultSender()])
           if (allowed) waitUntil(sendLoginCode(sender, email, otp))
         },
       }),
     ],
+    hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path === "/email-otp/send-verification-otp") await countLoginCode(ctx.body?.email)
+      }),
+    },
     databaseHooks: {
       user: {
         create: {
@@ -79,6 +87,39 @@ export function listPasskeys(userId: string) {
     columns: { id: true, name: true, createdAt: true },
     where: eq(schema.passkey.userId, userId),
     orderBy: desc(schema.passkey.createdAt),
+  })
+}
+
+const LOGIN_CODES_PER_HOUR = 5
+const HOUR = 60 * 60 * 1000
+
+/**
+ * Counts a code request for `email` and refuses it past the hourly cap, before Better Auth
+ * stores a new code. Each code allows 3 guesses and a new code resets them, so this cap is what
+ * bounds guessing. Better Auth's own limiter is off on Workers (no NODE_ENV) and keeps its
+ * counts in one isolate's memory; D1 counts across all of them.
+ */
+async function countLoginCode(email: unknown) {
+  // Better Auth refuses a request without an email itself.
+  if (typeof email !== "string") return
+  const now = Date.now()
+  const { count, windowStart } = schema.loginCodeRequests
+  const expired = sql`${windowStart} <= ${now - HOUR}`
+  const [row] = await db()
+    .insert(schema.loginCodeRequests)
+    .values({ email: email.trim().toLowerCase(), windowStart: new Date(now), count: 1 })
+    .onConflictDoUpdate({
+      target: schema.loginCodeRequests.email,
+      set: {
+        count: sql`case when ${expired} then 1 else ${count} + 1 end`,
+        windowStart: sql`case when ${expired} then ${now} else ${windowStart} end`,
+      },
+    })
+    .returning()
+  if (row.count <= LOGIN_CODES_PER_HOUR) return
+  const minutes = Math.ceil((row.windowStart.getTime() + HOUR - now) / 60_000)
+  throw new APIError("TOO_MANY_REQUESTS", {
+    message: `Too many codes for this email. Try again in ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`,
   })
 }
 

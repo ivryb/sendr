@@ -57,6 +57,13 @@
       "when": 1793179085917,
       "tag": "0007_media",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793247497153,
+      "tag": "0008_login_code_requests",
+      "breakpoints": true
     }
   ]
 }

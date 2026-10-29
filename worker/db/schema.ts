@@ -190,6 +190,13 @@ export const apiKeys = sqliteTable("api_keys", {
   lastUsedAt: timestamp("last_used_at"),
 })
 
+/** How many login codes each address asked for since `windowStart`, to cap code guessing. */
+export const loginCodeRequests = sqliteTable("login_code_requests", {
+  email: text("email").primaryKey(),
+  windowStart: timestamp("window_start").notNull(),
+  count: integer("count").notNull(),
+})
+
 /** One row (id 1) holding operator settings and secrets generated on first run. */
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey(),
