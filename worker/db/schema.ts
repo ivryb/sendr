@@ -128,7 +128,8 @@ export const deliveries = sqliteTable(
     ),
     // D1 counts every index entry a write touches as a row written, and Workers Free allows
     // 100,000 a day. So these indexes hold only the rows their lookups need: queued deliveries
-    // (see `isQueued`), and provider message IDs, which are set once the email is sent.
+    // (SQLite plans a bound `status = ?` with the value, so it uses this one), and provider
+    // message IDs, which are set once the email is sent.
     index("deliveries_queued_idx")
       .on(table.campaignId, table.batch)
       .where(sql`status = 'queued'`),
@@ -137,9 +138,6 @@ export const deliveries = sqliteTable(
       .where(sql`provider_message_id IS NOT NULL`),
   ]
 )
-
-/** Finds queued deliveries through `deliveries_queued_idx`, which a bound `status = ?` can't use. */
-export const isQueued = sql`${deliveries.status} = 'queued'`
 
 /** The links each delivery's recipient clicked, once per link, for unique clicks per URL. */
 export const clicks = sqliteTable(

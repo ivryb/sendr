@@ -17,7 +17,7 @@ import {
 } from "../../shared/model"
 import { markdownToHtml } from "../../shared/render"
 import { db } from "../db/client"
-import { campaigns, deliveries, isQueued } from "../db/schema"
+import { campaigns, deliveries } from "../db/schema"
 import { DomainError } from "../lib/errors"
 import type { InstanceSettings } from "../lib/settings"
 import { contactCounts } from "./contacts"
@@ -169,7 +169,7 @@ export async function advanceCampaign(id: string) {
   const queued = await db()
     .select({ batch: deliveries.batch, count: sql<number>`count(*)` })
     .from(deliveries)
-    .where(and(eq(deliveries.campaignId, id), isQueued))
+    .where(and(eq(deliveries.campaignId, id), eq(deliveries.status, "queued")))
     .groupBy(deliveries.batch)
   const remaining = (name: "first" | "rest") =>
     queued.find((row) => row.batch === name)?.count ?? 0

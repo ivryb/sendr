@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm"
 
 import { renderEmail, sampleRecipient } from "../../shared/render"
 import { db } from "../db/client"
-import { contacts, deliveries, isQueued } from "../db/schema"
+import { contacts, deliveries } from "../db/schema"
 import { PermanentSendError, type EmailProvider } from "../email/provider"
 import { senderProvider } from "../email/providers"
 import { signToken } from "../lib/crypto"
@@ -50,7 +50,7 @@ export async function processSendMessage({ campaignId }: SendMessage) {
       and(
         eq(deliveries.campaignId, campaignId),
         eq(deliveries.batch, campaign.status === "first_batch" ? "first" : "rest"),
-        isQueued
+        eq(deliveries.status, "queued")
       )
     )
     .limit(DELIVERIES_PER_MESSAGE)
