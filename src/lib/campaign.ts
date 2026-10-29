@@ -10,31 +10,61 @@ type StatusMeta = {
   label: string
   /** Tailwind classes for the status dot. */
   dot: string
+  /** Tailwind classes for the status label: a tinted background and text. */
+  tint: string
   /** How often to refresh a campaign in this status while it's live, in ms. */
   refresh: number | false
 }
 
+const SKY = "bg-sky-500/10 text-sky-700 dark:text-sky-300"
+const AMBER = "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+
 export const CAMPAIGN_STATUS: Record<CampaignStatus, StatusMeta> = {
-  draft: { label: "Draft", dot: "bg-muted-foreground/40", refresh: false },
+  draft: {
+    label: "Draft",
+    dot: "bg-muted-foreground/40",
+    tint: "bg-muted text-muted-foreground",
+    refresh: false,
+  },
   first_batch: {
     label: "First batch",
     dot: "bg-sky-500 animate-pulse",
+    tint: SKY,
     refresh: 3000,
   },
   // Bounce and complaint events keep arriving while the operator reviews.
   awaiting_approval: {
     label: "Needs review",
     dot: "bg-amber-500",
+    tint: AMBER,
     refresh: 10_000,
   },
-  sending: { label: "Sending", dot: "bg-sky-500 animate-pulse", refresh: 3000 },
+  sending: {
+    label: "Sending",
+    dot: "bg-sky-500 animate-pulse",
+    tint: SKY,
+    refresh: 3000,
+  },
   // Delivery reports keep arriving for a while after it finishes.
-  sent: { label: "Sent", dot: "bg-emerald-500", refresh: 30_000 },
+  sent: {
+    label: "Sent",
+    dot: "bg-emerald-500",
+    tint: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    refresh: 30_000,
+  },
   cancelled: {
     label: "Cancelled",
     dot: "bg-muted-foreground/40",
+    tint: "bg-muted text-muted-foreground",
     refresh: 30_000,
   },
+}
+
+/** How to show a campaign's status. A stalled send stops pulsing, so it doesn't pass for a live one. */
+export function statusMeta({ status, stalled }: Campaign) {
+  return stalled
+    ? { label: "Stalled", dot: "bg-amber-500", tint: AMBER }
+    : CAMPAIGN_STATUS[status]
 }
 
 // A refresh reads every delivery it counts, and Workers Free allows 5 million rows read a day.

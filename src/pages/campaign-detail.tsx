@@ -29,6 +29,7 @@ import {
   RATE_LIMITS,
   deliveryStats,
   engagementRate,
+  statusMeta,
 } from "@/lib/campaign"
 import { formatNumber, formatPercent, plural, useDates } from "@/lib/format"
 import { useChange } from "@/lib/mutations"
@@ -244,21 +245,37 @@ function StatusLine({ campaign }: { campaign: Campaign }) {
       ? `No progress since ${formatDateTime(progressAt)} · ${progress}`
       : {
           draft: null,
-          first_batch: `Sending the first batch · ${progress}`,
+          first_batch: progress,
           awaiting_approval: `The first ${formatNumber(sent)} went out. Check how they landed, then send to the other ${formatNumber(counts.queued)}.`,
-          sending: `Sending to everyone · ${progress}`,
-          sent: `Sent to ${plural(sent, "contact")}${finishedAt ? ` · ${formatDateTime(finishedAt)}` : ""}`,
-          cancelled: `Cancelled after ${progress}. The other ${formatNumber(counts.queued)} won't get it.`,
+          sending: progress,
+          sent: `${plural(sent, "contact")}${finishedAt ? ` · ${formatDateTime(finishedAt)}` : ""}`,
+          cancelled: `${progress}. The other ${formatNumber(counts.queued)} won't get it.`,
         }[status]
   return (
     <p
       className={cn(
-        "text-sm text-muted-foreground tabular-nums",
+        "flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground tabular-nums",
         stalled && "text-amber-600 dark:text-amber-400"
       )}
     >
+      <StatusLabel campaign={campaign} />
       {text}
     </p>
+  )
+}
+
+function StatusLabel({ campaign }: { campaign: Campaign }) {
+  const { label, dot, tint } = statusMeta(campaign)
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium",
+        tint
+      )}
+    >
+      <span className={cn("size-1.5 rounded-full", dot)} />
+      {label}
+    </span>
   )
 }
 
