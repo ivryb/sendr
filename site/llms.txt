@@ -139,6 +139,8 @@ Sends need <the user's name>'s go-ahead, as the API reference describes. Send te
 
 If the project sends other email elsewhere, like receipts from its app through another service, say so in a sentence after the first paragraph, so later sessions pick the right tool.
 
+If the repository's `AGENTS.md` or `CLAUDE.md` lists its skills, add a line for `sendr` in the same style.
+
 Done when the file is saved.
 
 ## 10. Hand over
