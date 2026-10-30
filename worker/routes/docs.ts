@@ -27,7 +27,9 @@ Each key has one or more. \`GET /me\` returns the caller's.
 - \`full\`: everything below, including campaigns, senders and settings. Covers the other two.
 
 An app's backend usually has \`contacts\`, \`emails\` or both; agents get \`full\`. A missing
-permission returns \`403 forbidden\`.
+permission returns \`403 forbidden\`. To make a key without the admin app, run
+\`bun run api-key ${baseUrl} --name "<app> backend" --permissions contacts,emails\` in the checkout
+this instance deploys from; it prints the key.
 
 ## Contacts (contacts permission)
 
@@ -126,13 +128,18 @@ Statuses: draft, first_batch, awaiting_approval, sending, sent, cancelled.
 - \`PUT /campaigns/{id}\` edits a draft. \`DELETE /campaigns/{id}\` deletes a draft.
 - \`GET /campaigns/{id}/screenshot?theme=both\` returns a PNG of the email as a recipient sees it, under
   a mail client's From and Subject. \`theme\` is \`light\`, \`dark\` or \`both\` (the default, side by side).
-  Merge tags show their fallbacks. Show it to the user before starting a campaign. It runs a browser
+  Merge tags show their fallbacks. Save it to a file and look at it yourself, then show it to the user:
+  embed it in your reply if your interface renders images, or open it with \`open\` or \`xdg-open\`. It runs a browser
   through Cloudflare Browser Run; \`503 browser_unavailable\` means it's busy or at its daily limit
   (on the Workers Free plan, a new browser every 20 seconds and 10 browser-minutes a day), so retry later.
 - \`POST /campaigns/{id}/test\` with \`{ "to": "you@example.com" }\` sends one test copy. \`to\` is
   required with an API key.
 - \`POST /campaigns/{id}/start\`, \`/approve\`, \`/cancel\`. Start refuses with \`400 not_ready\` when the
   sender isn't ready, or when the list is bigger than what's left of the SES account's 24-hour quota.
+
+Starting a campaign emails real people, and approving it emails everyone. Before either, show the
+user the campaign's screenshot, send them a test, and tell them how many subscribed contacts it goes
+to. Start or approve only when they say so.
 
 The footer under every campaign (with the sender's postal address) is \`footer\` in settings.
 
@@ -189,5 +196,11 @@ after a denial: https://github.com/ivryb/sendr/blob/main/docs/ses-production-acc
 - \`GET /settings\`, \`PUT /settings\` with \`{ "footer"?, "publicUrl"? }\`. \`footer\` is Markdown.
   \`publicUrl\` is this instance's https address, used in unsubscribe links and by SES delivery
   reports. The admin's first sign-in fills it in; set it yourself if you set up Sendr before that.
+
+## Updating Sendr
+
+An instance runs the code it was last deployed with, and this page describes that version. To
+update it, run \`git pull && bun install && bun run deploy\` in the checkout it deploys from. The
+deploy also applies database migrations.
 `
 }
