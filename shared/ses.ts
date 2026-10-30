@@ -11,7 +11,7 @@ export const SES_KEY_POLICY = `{
     },
     {
       "Effect": "Allow",
-      "Action": ["sns:CreateTopic", "sns:Subscribe"],
+      "Action": ["sns:CreateTopic", "sns:Subscribe", "sns:GetSubscriptionAttributes"],
       "Resource": "arn:aws:sns:*:*:sendr-*"
     }
   ]

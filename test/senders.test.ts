@@ -119,6 +119,28 @@ describe("delivery reports", () => {
     expect((await check(sender.id)).sender.eventsConnected).toBe(true)
   })
 
+  it("shows reports connected right away when AWS already confirmed the subscription", async () => {
+    fakeAws.subscriptionConfirmed = true
+    const sender = await addSender(admin)
+    expect(sender.eventsConnected).toBe(true)
+  })
+
+  it("still connects a key made with the earlier policy, and waits for AWS's confirmation", async () => {
+    fakeAws.subscriptionConfirmed = true
+    fakeAws.denySubscriptionAttributes = true
+    const sender = await addSender(admin)
+    expect((await check(sender.id)).sender.eventsConnected).toBe(false)
+
+    await request(`/hooks/ses/${await webhookSecret()}`, {
+      json: {
+        Type: "SubscriptionConfirmation",
+        TopicArn: TOPIC_ARN,
+        SubscribeURL: "https://sns.us-east-1.amazonaws.com/?Action=ConfirmSubscription&Token=t",
+      },
+    })
+    expect((await check(sender.id)).sender.eventsConnected).toBe(true)
+  })
+
   it("never follows a confirmation link outside AWS", async () => {
     const response = await request(`/hooks/ses/${await webhookSecret()}`, {
       json: { Type: "SubscriptionConfirmation", SubscribeURL: "https://evil.example/confirm" },

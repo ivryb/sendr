@@ -5,6 +5,10 @@ export const fakeAws = {
   production: true,
   /** AWS rejects the key outright. */
   rejectKey: false,
+  /** AWS confirmed the SNS subscription, from an earlier sender or an earlier setup. */
+  subscriptionConfirmed: false,
+  /** The key was made with the policy from before Sendr read subscription attributes. */
+  denySubscriptionAttributes: false,
   /** The account's 24-hour sending quota, and how much of it the last 24 hours used. */
   max24HourSend: 50000,
   sentLast24Hours: 0,
@@ -18,6 +22,8 @@ export function resetFakeAws() {
     verified: true,
     production: true,
     rejectKey: false,
+    subscriptionConfirmed: false,
+    denySubscriptionAttributes: false,
     max24HourSend: 50000,
     sentLast24Hours: 0,
     requests: [],
@@ -35,13 +41,21 @@ export async function fakeAwsResponse(request: Request) {
     )
   }
   if (url.hostname.startsWith("sns.")) {
-    const action = new URLSearchParams(body).get("Action") ?? url.searchParams.get("Action")
+    const params = new URLSearchParams(body)
+    const action = params.get("Action") ?? url.searchParams.get("Action")
+    if (action === "GetSubscriptionAttributes" && fakeAws.denySubscriptionAttributes) {
+      return new Response("<ErrorResponse><Error><Code>AuthorizationError</Code></Error></ErrorResponse>", { status: 403 })
+    }
+    const pending = String(!fakeAws.subscriptionConfirmed)
     const result =
       action === "CreateTopic"
         ? `<TopicArn>${TOPIC_ARN}</TopicArn>`
         : action === "Subscribe"
-          ? "<SubscriptionArn>pending confirmation</SubscriptionArn>"
-          : ""
+          ? // As AWS does for https, even once the subscription is confirmed.
+            `<SubscriptionArn>${params.get("ReturnSubscriptionArn") === "true" ? `${TOPIC_ARN}:sub-1` : "pending confirmation"}</SubscriptionArn>`
+          : action === "GetSubscriptionAttributes"
+            ? `<Attributes><entry><key>PendingConfirmation</key><value>${pending}</value></entry></Attributes>`
+            : ""
     return new Response(`<${action}Response><${action}Result>${result}</${action}Result></${action}Response>`)
   }
   const path = url.pathname.replace("/v2/email", "")

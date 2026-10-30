@@ -61,8 +61,26 @@ export function sesAccount(
    * posts a confirmation request to the endpoint.
    */
   async function subscribe(topicArn: string, endpoint: string) {
-    const reply = await sns({ Action: "Subscribe", TopicArn: topicArn, Protocol: "https", Endpoint: endpoint })
-    return xmlValue(reply, "SubscriptionArn")?.startsWith("arn:") ?? false
+    // For an https endpoint, Subscribe answers "pending confirmation" even when AWS confirmed
+    // the subscription long ago, so get its ARN and ask whether it still waits.
+    const reply = await sns({
+      Action: "Subscribe",
+      TopicArn: topicArn,
+      Protocol: "https",
+      Endpoint: endpoint,
+      ReturnSubscriptionArn: "true",
+    })
+    const subscriptionArn = xmlValue(reply, "SubscriptionArn")
+    if (!subscriptionArn) return false
+    const attributes = await sns({ Action: "GetSubscriptionAttributes", SubscriptionArn: subscriptionArn }).catch(
+      (error: unknown) => {
+        // Keys made with the policy from before Sendr asked: the confirmation webhook still
+        // marks reports as connected.
+        if (error instanceof AwsError && error.code === "AuthorizationError") return ""
+        throw error
+      }
+    )
+    return /<key>PendingConfirmation<\/key>\s*<value>false<\/value>/.test(attributes)
   }
 
   /**
