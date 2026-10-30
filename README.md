@@ -21,7 +21,7 @@ Paste this into Claude Code, Codex or another coding agent:
 Set up Sendr for me: https://sendr.soy/llms.txt
 ```
 
-The guide there has the agent explain Sendr, check it can reach your Cloudflare and AWS accounts, deploy, set up SES and send you a test. It gives itself an API key, saved in `~/.config/sendr/`, and installs a `sendr` skill so later sessions can run campaigns for you. The guide is [`site/llms.txt`](site/llms.txt).
+The guide there has the agent explain Sendr, check it can reach your Cloudflare and AWS accounts, deploy, set up SES and send you a test. It gives itself an API key, saved in `~/.config/sendr/`, and installs a `sendr` skill in your project that points later sessions at your instance and its API reference. The guide is [`site/llms.txt`](site/llms.txt).
 
 ### By hand
 

@@ -41,6 +41,7 @@ Ask the user for:
 - The From name and address, like `Acme <news@acme.com>`, and an AWS region near their users (`us-east-1` if they don't mind).
 - Their company name and postal address for the footer. Anti-spam laws require an address.
 - Where to keep the Sendr checkout. Updates deploy from it.
+- Their app's repository, if they have one. The Sendr skill goes there in step 9.
 - Whether their Cloudflare account has Workers Paid, the $5 a month plan. Wrangler can't show the plan, so ask. They can see it on the Workers plans page in the Cloudflare dashboard.
 
 If the account is on Workers Free, or they aren't sure, tell them what Free allows, in plain words: "Workers Free sends about 12,000 campaign emails a day. A bigger list pauses at the limit and carries on after midnight UTC, and a list over about 25,000 can't start. Bigger lists need Workers Paid, $5 a month, which you can turn on at any time." The README's "Workers Free or Paid" section in the checkout has the details.
@@ -105,43 +106,38 @@ Done when the request is submitted, or the sender already shows `"production": t
 
 ## 8. Send a test
 
-Set the footer with `PUT /settings` (`footer` in Markdown, with the company name and postal address; Sendr adds the unsubscribe link below it). Create a short draft with `POST /campaigns` and show the user its picture from `GET /campaigns/{id}/screenshot` (the skill in step 9 shows how). Then send it to them with `POST /campaigns/{id}/test`, and delete the draft after.
+Set the footer with `PUT /settings` (`footer` in Markdown, with the company name and postal address; Sendr adds the unsubscribe link below it). Create a short draft with `POST /campaigns` and show the user its picture from `GET /campaigns/{id}/screenshot` (the API reference says how). Then send it to them with `POST /campaigns/{id}/test`, and delete the draft after.
 
 Done when the user confirms the test arrived and looks right.
 
 ## 9. Install the Sendr skill
 
-Future sessions find Sendr through a skill. Save the text below as `SKILL.md` in a `sendr` folder in the user's skills directory: `~/.claude/skills/sendr/` for Claude Code, `~/.agents/skills/sendr/` for Codex. For any other agent, save it where that agent keeps user-level skills or instructions. The skill holds no secrets; it reads them from `~/.config/sendr/`.
+Future sessions find Sendr through a `sendr` skill written for this project. It only points at the instance: the API reference at `/api/v1/docs` describes everything Sendr does and updates with every deploy, while a copied skill would not. Save it as `SKILL.md` in a `sendr` folder in the project's repository, where its skills live (`.claude/skills/` for Claude Code, `.agents/skills/` for Codex), so it travels with the project. Without a repository, save it in the user's skills directory (`~/.claude/skills/sendr/` or `~/.agents/skills/sendr/`).
+
+Fill in the angle brackets from the user's answers in step 3, and keep the rest as written. The description is what makes later sessions reach for the skill, so keep its list of tasks. The skill holds no secrets.
 
 ```markdown
 ---
 name: sendr
-description: Sendr, the user's own email tool on Cloudflare and Amazon SES. Use when they want to email their users, write, send or analyze a campaign, send a single email, or manage contacts, senders or Sendr itself.
+description: Email <Project>'s users through Sendr, its own email tool at <host>. Use for newsletters, campaigns, product updates and announcements; campaign results like opens, clicks and unsubscribes; single emails from the app, like welcome notes; syncing or importing contacts; and senders, the footer or updating Sendr.
 ---
 
 # Sendr
 
-Each `~/.config/sendr/<host>.env` file is a Sendr instance you can use. It sets `SENDR_URL` (the instance, where the admin app also lives), `SENDR_API_KEY` (a full-access API key) and `SENDR_CHECKOUT` (the git checkout it deploys from). With several, pick by host or ask which project. Shell variables may not last between commands, so load the file in every command that calls the API:
+<Project> sends its newsletters and campaigns through Sendr, its own email tool at <instance URL>, from <From address>.
+
+Read <instance URL>/api/v1/docs at the start of each session. It's the reference for everything Sendr does, and it matches the deployed version.
+
+Load `~/.config/sendr/<host>.env` (`SENDR_URL`, `SENDR_API_KEY`, `SENDR_CHECKOUT`) in every command that calls the API, since shell variables may not last between commands:
 
     set -a; . ~/.config/sendr/<host>.env; set +a
-    curl -s "$SENDR_URL/api/v1/me" -H "Authorization: Bearer $SENDR_API_KEY"
 
-Read `$SENDR_URL/api/v1/docs` before your first call in a session. It's the API reference.
+If the file is missing on this machine, run `bun run api-key <instance URL> --save` in a Sendr checkout.
 
-Write campaigns in the `editor` format, with the tags listed under Campaigns in the API reference. Upload images, GIFs, video and audio with `POST /media` and use the URLs it returns; for a video, upload its poster image first.
-
-Starting a campaign emails real people, and approving it emails everyone. Before either, show the user the campaign's screenshot, send them a test with `POST /campaigns/{id}/test`, and tell them how many subscribed contacts it goes to. Start or approve only when they say so. To get the screenshot, light and dark side by side:
-
-    curl -s "$SENDR_URL/api/v1/campaigns/<id>/screenshot" -H "Authorization: Bearer $SENDR_API_KEY" -o /tmp/sendr-preview.png
-
-Look at it yourself, then show it to the user: embed it in your reply if your interface renders images (`![Preview](/tmp/sendr-preview.png)`), or open it for them with `open` (macOS) or `xdg-open` (Linux).
-
-- Update Sendr: `cd "$SENDR_CHECKOUT" && git pull && bun install && bun run deploy`.
-- Import a list from another tool, such as a CSV export: read it yourself and send `POST /contacts/batch` calls of up to 250 contacts, each with `email` and no `externalId`. Give everyone the old tool lists as unsubscribed, bounced or complained `"unsubscribed": true`.
-- A key for the user's app: `bun run api-key "$SENDR_URL" --name "<app> backend" --permissions contacts,emails` in the checkout prints one.
-- SES production access, including what to do after a denial: `$SENDR_CHECKOUT/docs/ses-production-access.md`.
-- A `503` with `"error": "cloudflare_limit"` means the Cloudflare account is on Workers Free and used up a daily limit. Every call fails until 00:00 UTC, and sending campaigns resume on their own after that. Tell the user which limit its `message` names and when it resets, and that Workers Paid ($5 a month) lifts it. Don't retry before the reset.
+Sends need <the user's name>'s go-ahead, as the API reference describes. Send tests to <their email>.
 ```
+
+If the project sends other email elsewhere, like receipts from its app through another service, say so in a sentence after the first paragraph, so later sessions pick the right tool.
 
 Done when the file is saved.
 
