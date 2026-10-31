@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { DnsRecord, Sender } from "../shared/model"
 import { fakeAws, TOPIC_ARN } from "./fake-aws"
+import { fakeDns } from "./fake-dns"
 import {
   addSender,
   createApiKey,
@@ -60,6 +61,24 @@ describe("connecting a sender", () => {
       "TXT bounce.example.com",
       "TXT _dmarc.example.com",
     ])
+  })
+
+  // A domain can have only one DMARC record, so recommending a second one would break it.
+  it("shows the domain's own DMARC record as found instead of recommending another", async () => {
+    const sender = await addSender(admin)
+    const dmarc = async () => {
+      const status = await check(sender.id)
+      return status.ok && status.records.find((record) => record.name === "_dmarc.example.com")
+    }
+    expect(await dmarc()).toMatchObject({ value: '"v=DMARC1; p=none;"', status: "recommended" })
+
+    fakeDns.txt["_dmarc.example.com"] = ['"v=spf1 -all"', '"v=DMARC1; p=quarantine; rua=mailto:dmarc@example.com"']
+    expect(await dmarc()).toEqual({
+      type: "TXT",
+      name: "_dmarc.example.com",
+      value: '"v=DMARC1; p=quarantine; rua=mailto:dmarc@example.com"',
+      status: "verified",
+    })
   })
 
   it("has SES skip bounced addresses, and for campaigns spam complaints, also for senders connected before", async () => {

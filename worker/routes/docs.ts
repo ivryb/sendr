@@ -191,8 +191,9 @@ ${SES_KEY_POLICY}
 \`\`\`
 
 - \`GET /senders/{id}\` checks it live: the DNS \`records\` to add, whether it's \`verified\`, and
-  whether the SES account has \`production\` access. Add every record, then check again; SES
-  usually verifies the domain within an hour.
+  whether the SES account has \`production\` access. Add every record that isn't \`verified\`, then
+  check again; SES usually verifies the domain within an hour. A \`_dmarc\` record the domain
+  already has shows as \`verified\`, since a domain can have only one.
 - \`PATCH /senders/{id}\` with \`{ "name"?, "replyTo"? }\`. \`DELETE /senders/{id}\`.
 
 A new SES account is in the sandbox: it sends only to addresses verified in SES, and campaigns

@@ -82,8 +82,9 @@ export async function checkSender(id: string) {
     row.eventsConnected ||
     (row.eventsTopicArn !== null && (await ses.subscribe(row.eventsTopicArn, eventsUrl(await getSettings()))))
   try {
-    const [identity, account, connected] = await Promise.all([
+    const [identity, dmarc, account, connected] = await Promise.all([
       ses.domain(domain),
+      dmarcRecord(domain),
       ses.account(),
       eventsConnected(),
       // Senders connected before campaigns had their own configuration set get it here: starting
@@ -101,7 +102,7 @@ export async function checkSender(id: string) {
       ok: true as const,
       sender: toSenderDto({ ...row, ...status }),
       domain,
-      records: dnsRecords(domain, row.region, identity),
+      records: dnsRecords(domain, row.region, identity, dmarc),
       max24HourSend: account.max24HourSend,
       sentLast24Hours: account.sentLast24Hours,
       maxSendRate: account.maxSendRate,
@@ -175,7 +176,8 @@ function domainOf(email: string) {
 function dnsRecords(
   domain: string,
   region: string,
-  identity: Awaited<ReturnType<ReturnType<typeof sesAccount>["domain"]>>
+  identity: Awaited<ReturnType<ReturnType<typeof sesAccount>["domain"]>>,
+  dmarc: string | null
 ): DnsRecord[] {
   const dkim: DnsRecord["status"] = identity.dkimVerified ? "verified" : "pending"
   const mailFrom: DnsRecord["status"] = identity.mailFromVerified ? "verified" : "pending"
@@ -198,8 +200,24 @@ function dnsRecords(
       value: '"v=spf1 include:amazonses.com ~all"',
       status: mailFrom,
     },
-    { type: "TXT", name: `_dmarc.${domain}`, value: '"v=DMARC1; p=none;"', status: "recommended" },
+    // A domain can have only one DMARC record, so one it has already is shown instead.
+    dmarc
+      ? { type: "TXT", name: `_dmarc.${domain}`, value: dmarc, status: "verified" }
+      : { type: "TXT", name: `_dmarc.${domain}`, value: '"v=DMARC1; p=none;"', status: "recommended" },
   ]
+}
+
+/**
+ * The domain's DMARC record as DNS quotes it, or null when it has none. Read through
+ * Cloudflare's DNS over HTTPS; a failed lookup counts as none, so it never fails the check.
+ */
+async function dmarcRecord(domain: string) {
+  const response = await fetch(`https://cloudflare-dns.com/dns-query?name=_dmarc.${domain}&type=TXT`, {
+    headers: { accept: "application/dns-json" },
+  }).catch(() => null)
+  if (!response?.ok) return null
+  const { Answer = [] } = await response.json<{ Answer?: { data: string }[] }>().catch(() => ({ Answer: [] }))
+  return Answer.map(({ data }) => data).find((data) => data.replaceAll('"', "").startsWith("v=DMARC1")) ?? null
 }
 
 /** AWS errors in words the admin can act on. */

@@ -92,7 +92,7 @@ Done when `GET /me` returns `"permissions":["full"]` and `GET /settings` returns
 
 1. Create an IAM user for this instance with the policy from the Senders section of the API reference, then an access key for it. Use `aws iam create-user`, `aws iam put-user-policy` and `aws iam create-access-key`. A new key takes about ten seconds to start working. Delete any policy file you wrote.
 2. `POST /senders` with the name, address, region and the key.
-3. `GET /senders/{id}` lists the DNS records SES needs. Add every one; on Cloudflare, set them to DNS only, not proxied. A domain can have only one DMARC record, so skip the `_dmarc` record if the domain already has one. Check the sender every few minutes until it's verified. That usually takes under an hour.
+3. `GET /senders/{id}` lists the DNS records SES needs. Add every one that isn't `verified` yet; on Cloudflare, set them to DNS only, not proxied. A `_dmarc` record the domain already has shows as `verified`, since a domain can have only one. Check the sender every few minutes until it's verified. That usually takes under an hour.
 
 Done when `GET /senders/{id}` returns `"verified": true`.
 

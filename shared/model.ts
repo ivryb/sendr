@@ -172,7 +172,7 @@ export type Sender = {
   createdAt: string
 }
 
-/** A DNS record the sender's domain needs. "recommended" ones can't be checked by the provider. */
+/** A DNS record the sender's domain needs. "recommended" ones are optional and missing. */
 export type DnsRecord = {
   type: "CNAME" | "MX" | "TXT"
   name: string
