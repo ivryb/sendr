@@ -1,4 +1,4 @@
-import { CONTACTS_BATCH_LIMIT } from "../../shared/model"
+import { CONTACTS_BATCH_LIMIT, EMAIL_RECIPIENTS_MAX } from "../../shared/model"
 import { SES_KEY_POLICY } from "../../shared/ses"
 
 /** The API reference served at /api/v1/docs, written for agents and developers to read. */
@@ -68,23 +68,30 @@ curl -X PUT ${api}/contacts/user_123 \\
 ## Single emails (emails permission)
 
 For receipts, welcome notes and other one-off emails. They go out right away, without the
-campaign footer or an unsubscribe link. Addresses that bounced or complained before are
-refused with \`422 suppressed\`.
+campaign footer or an unsubscribe link. If anyone on the email bounced or complained before, it
+is refused with \`422 suppressed\`, naming them, and nothing is sent.
 
 - \`POST /emails\` with \`{ "from": "<sender address or id>", "to", "subject", "markdown" }\`.
+  \`to\` is one address or a list. Optional \`cc\` is a list, and everyone on the email sees
+  everyone else. ${EMAIL_RECIPIENTS_MAX} people at most, \`to\` and \`cc\` together.
   Instead of \`markdown\`, send \`html\` (and optionally \`text\`). Optional \`replyTo\`.
-  Returns \`{ "email": { "id", "status", ... } }\`. If SES rejects the message itself (for example,
-  an unverified recipient while the SES account is in its sandbox), the reply is still 200 with
-  \`status: "failed"\` and the reason in \`error\`. \`503 send_failed\` means SES was busy or paused
-  and nothing was sent; retry later.
-- \`GET /emails/{id}\`: status is sent, delivered, bounced, complained or failed. Delivery
-  reports arrive within minutes.
+  Returns \`{ "email": { "id", "status", "recipients": [{ "email", "field", "status" }], ... } }\`.
+  If SES rejects the message itself (for example, an unverified recipient while the SES account
+  is in its sandbox), the reply is still 200 with \`status: "failed"\` and the reason in
+  \`error\`. \`503 send_failed\` means SES was busy or paused and nothing was sent; retry later.
+- Send an \`Idempotency-Key\` header, like \`export-123-ready\`, so a retry can't send the email
+  twice: a repeat with the same key returns the first email and sends nothing. Keys are shared by
+  everything that uses this instance, so make each one unique to its email. After a
+  \`503 send_failed\` nothing was sent, so a retry with the same key does send.
+- \`GET /emails/{id}\`: each recipient's status is sent, delivered, bounced or complained, or
+  failed when the whole email did. Delivery reports arrive within minutes.
 
 Example:
 
 \`\`\`sh
 curl -X POST ${api}/emails \\
   -H "Authorization: Bearer $SENDR_API_KEY" -H "Content-Type: application/json" \\
+  -H "Idempotency-Key: welcome-user_123" \\
   -d '{"from": "hello@example.com", "to": "ada@example.com", "subject": "Welcome", "markdown": "Hi Ada, thanks for signing up."}'
 \`\`\`
 

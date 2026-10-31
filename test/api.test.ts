@@ -1,16 +1,18 @@
-import { env } from "cloudflare:test"
 import { exports } from "cloudflare:workers"
 import { beforeEach, describe, expect, it } from "vitest"
 
 import type { Email } from "../shared/model"
-import { fakeAws, TOPIC_ARN } from "./fake-aws"
+import { fakeAws } from "./fake-aws"
 import {
   addSender,
   createApiKey,
+  messageIdTo,
+  permanentBounce,
+  postSesEvent,
   request,
   sentEmails,
+  sesEvent,
   signInAsAdmin,
-  webhookSecret,
 } from "./helpers"
 
 let admin: string
@@ -127,7 +129,10 @@ describe("single emails", () => {
       markdown: "Thanks for **signing up**.",
     })
     const { email } = await response.json<{ email: Email }>()
-    expect(email).toMatchObject({ to: "ann@example.com", status: "sent" })
+    expect(email).toMatchObject({
+      status: "sent",
+      recipients: [{ email: "ann@example.com", field: "to", status: "sent" }],
+    })
 
     const sent = sentEmails().at(-1)!
     expect(sent.from).toBe('"Evan" <evan@example.com>')
@@ -151,28 +156,70 @@ describe("single emails", () => {
     const { email } = await (
       await sendEmail(key, { markdown: "Hi" })
     ).json<{ email: Email }>()
-    const row = await env.DB.prepare(
-      "SELECT provider_message_id AS id FROM emails WHERE id = ?"
-    )
-      .bind(email.id)
-      .first<{ id: string }>()
-    await request(`/hooks/ses/${await webhookSecret()}`, {
-      json: {
-        Type: "Notification",
-        TopicArn: TOPIC_ARN,
-        Message: JSON.stringify({
-          eventType: "Bounce",
-          mail: { messageId: row!.id },
-          bounce: { bounceType: "Permanent" },
-        }),
-      },
-    })
+    await postSesEvent(permanentBounce(messageIdTo("ann@example.com")))
 
     const status = await request(`/api/v1/emails/${email.id}`, { bearer: key })
-    expect(await status.json()).toMatchObject({ email: { status: "bounced" } })
+    expect(await status.json()).toMatchObject({
+      email: { recipients: [{ email: "ann@example.com", status: "bounced" }] },
+    })
     const again = await sendEmail(key, { markdown: "Hi again" })
     expect(again.status).toBe(422)
     expect(await again.json()).toMatchObject({ error: "suppressed" })
+  })
+
+  it("sends one email to several people and copies, and tracks each one's report", async () => {
+    const { email } = await (
+      await sendEmail(key, {
+        to: ["ann@example.com", "Bob@Example.com"],
+        cc: ["ops@example.com", "ann@example.com"],
+        markdown: "Your export failed.",
+      })
+    ).json<{ email: Email }>()
+    expect(sentEmails().at(-1)).toMatchObject({
+      to: ["ann@example.com", "bob@example.com"],
+      cc: ["ops@example.com"],
+    })
+
+    const id = messageIdTo("bob@example.com")
+    await postSesEvent(sesEvent("Delivery", id, { recipients: ["ann@example.com", "ops@example.com"] }))
+    await postSesEvent(permanentBounce(id, ["bob@example.com"]))
+    const status = await request(`/api/v1/emails/${email.id}`, { bearer: key })
+    expect((await status.json<{ email: Email }>()).email.recipients).toEqual([
+      { email: "ann@example.com", field: "to", status: "delivered" },
+      { email: "bob@example.com", field: "to", status: "bounced" },
+      { email: "ops@example.com", field: "cc", status: "delivered" },
+    ])
+
+    const again = await sendEmail(key, { cc: ["bob@example.com"], markdown: "Hi" })
+    expect(again.status).toBe(422)
+    expect(await again.json()).toMatchObject({
+      error: "suppressed",
+      message: expect.stringContaining("bob@example.com"),
+    })
+  })
+
+  it("sends once for a repeated Idempotency-Key, and answers the repeat with the first email", async () => {
+    const send = (idempotencyKey: string) =>
+      request("/api/v1/emails", {
+        bearer: key,
+        headers: { "Idempotency-Key": idempotencyKey },
+        json: { from: "evan@example.com", to: "ann@example.com", subject: "Ready", markdown: "Hi" },
+      })
+    const first = await (await send("export-1-ready")).json<{ email: Email }>()
+    const repeat = await (await send("export-1-ready")).json<{ email: Email }>()
+    expect(repeat.email.id).toBe(first.email.id)
+    expect(sentEmails().filter((sent) => sent.subject === "Ready")).toHaveLength(1)
+
+    await send("export-2-ready")
+    expect(sentEmails().filter((sent) => sent.subject === "Ready")).toHaveLength(2)
+  })
+
+  it("sends to as many people as one email can have, and refuses more", async () => {
+    const readers = Array.from({ length: 51 }, (_, i) => `reader${i}@example.com`)
+    const full = await sendEmail(key, { to: readers.slice(0, 40), cc: readers.slice(40, 50), markdown: "Hi" })
+    const { email } = await full.json<{ email: Email }>()
+    expect(email.recipients).toHaveLength(50)
+    expect((await sendEmail(key, { to: readers, markdown: "Hi" })).status).toBe(400)
   })
 
   it("needs a message", async () => {

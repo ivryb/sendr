@@ -132,7 +132,7 @@ curl -X POST https://emails.example.com/api/v1/emails \
   -d '{ "from": "hello@example.com", "to": "ann@example.com", "subject": "Welcome", "markdown": "Thanks for signing up." }'
 ```
 
-`from` is one of your verified senders. Single emails go out right away, without the campaign footer or an unsubscribe link. Addresses that bounced or reported spam before are refused. `GET /api/v1/emails/{id}` shows whether it was delivered.
+`from` is one of your verified senders. `to` takes one address or a list, and `cc` a list. Single emails go out right away, without the campaign footer or an unsubscribe link. If anyone on it bounced or reported spam before, the whole email is refused. An `Idempotency-Key` header makes a retry safe: a repeat with the same key sends nothing. `GET /api/v1/emails/{id}` shows whether each recipient got it.
 
 ## Writing campaigns
 

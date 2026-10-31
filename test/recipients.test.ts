@@ -5,8 +5,12 @@ import { TOPIC_ARN } from "./fake-aws"
 import {
   addSender,
   createApiKey,
+  messageIdTo,
+  permanentBounce,
+  postSesEvent,
   request,
   sentEmails,
+  sesEvent,
   signInAsAdmin,
   webhookSecret,
 } from "./helpers"
@@ -55,7 +59,7 @@ async function contactStatus(email: string) {
 
 /** Path of the unsubscribe link in the email sent to `email`. */
 function unsubscribePath(email: string) {
-  const header = sentEmails().find((sent) => sent.to === email)!.headers!["List-Unsubscribe"]
+  const header = sentEmails().find((sent) => sent.to.includes(email))!.headers!["List-Unsubscribe"]
   return new URL(header.slice(1, -1)).pathname
 }
 
@@ -80,7 +84,7 @@ describe("unsubscribing", () => {
 
     sentEmails().length = 0
     await sendCampaign()
-    expect(sentEmails().map((email) => email.to)).toEqual(["bob@example.com"])
+    expect(sentEmails().flatMap((email) => email.to)).toEqual(["bob@example.com"])
   })
 
   it("the recipient can resubscribe from the same page", async () => {
@@ -101,25 +105,6 @@ describe("unsubscribing", () => {
 })
 
 describe("provider events", () => {
-  /** Posts an SES event the way SNS delivers it. */
-  async function postSesEvent(event: unknown, secret?: string) {
-    return request(`/hooks/ses/${secret ?? (await webhookSecret())}`, {
-      json: { Type: "Notification", TopicArn: TOPIC_ARN, Message: JSON.stringify(event) },
-    })
-  }
-
-  /** The provider's ID for the latest email to `email`, as SES events carry it. */
-  const messageIdTo = (email: string) =>
-    sentEmails().findLast((sent) => sent.to === email)!.providerMessageId
-
-  const sesEvent = (eventType: string, messageId: string, extra = {}) => ({
-    eventType,
-    mail: { messageId },
-    ...extra,
-  })
-
-  const permanentBounce = (messageId: string) =>
-    sesEvent("Bounce", messageId, { bounce: { bounceType: "Permanent" } })
   const changeEmail = (externalId: string, email: string) =>
     request(`/api/v1/contacts/${externalId}`, { method: "PUT", bearer: apiKey, json: { email } })
 
@@ -142,15 +127,13 @@ describe("provider events", () => {
 
     sentEmails().length = 0
     await sendCampaign()
-    expect(sentEmails().map((email) => email.to)).toEqual(["bob@example.com"])
+    expect(sentEmails().flatMap((email) => email.to)).toEqual(["bob@example.com"])
   })
 
   it("a transient bounce changes nothing", async () => {
     await sendCampaign()
     await postSesEvent(
-      sesEvent("Bounce", messageIdTo("ann@example.com"), {
-        bounce: { bounceType: "Transient" },
-      })
+      sesEvent("Bounce", messageIdTo("ann@example.com"), { bounceType: "Transient" })
     )
     expect(await contactStatus("ann@example.com")).toBe("subscribed")
   })

@@ -16,8 +16,10 @@ import {
   CAMPAIGN_STATUSES,
   CONTACT_STATUSES,
   DELIVERY_STATUSES,
+  EMAIL_REPORTS,
   EMAIL_STATUSES,
   MEDIA_KINDS,
+  RECIPIENT_FIELDS,
   SENDER_PROVIDERS,
 } from "../../shared/model"
 
@@ -158,16 +160,31 @@ export const emails = sqliteTable(
   {
     id: id(),
     senderId: text("sender_id").references(() => senders.id, { onDelete: "set null" }),
-    to: text("to").notNull(),
     subject: text("subject").notNull(),
     status: text("status", { enum: EMAIL_STATUSES }).notNull(),
     providerMessageId: text("provider_message_id"),
     error: text("error"),
+    /** The caller's `Idempotency-Key`: a repeat with the same key gets this email back unsent. */
+    idempotencyKey: text("idempotency_key").unique(),
     createdAt: createdAt(),
   },
+  (table) => [index("emails_provider_message_idx").on(table.providerMessageId)]
+)
+
+export const emailRecipients = sqliteTable(
+  "email_recipients",
+  {
+    emailId: text("email_id")
+      .notNull()
+      .references(() => emails.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    field: text("field", { enum: RECIPIENT_FIELDS }).notNull(),
+    /** What SES reported about this recipient, once it has. */
+    report: text("report", { enum: EMAIL_REPORTS }),
+  },
   (table) => [
-    index("emails_provider_message_idx").on(table.providerMessageId),
-    index("emails_to_idx").on(table.to),
+    primaryKey({ columns: [table.emailId, table.email] }),
+    index("email_recipients_email_idx").on(table.email),
   ]
 )
 

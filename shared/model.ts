@@ -30,16 +30,28 @@ export const CAMPAIGN_STATUSES = [
 ] as const
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number]
 
-export const EMAIL_STATUSES = ["sent", "delivered", "bounced", "complained", "failed"] as const
+/** Whether SES took a single email. "failed": it refused the email, and `error` says why. */
+export const EMAIL_STATUSES = ["sent", "failed"] as const
 export type EmailStatus = (typeof EMAIL_STATUSES)[number]
+
+/** What SES reported about one recipient of a single email. */
+export const EMAIL_REPORTS = ["delivered", "bounced", "complained"] as const
+export type EmailReport = (typeof EMAIL_REPORTS)[number]
+
+/** SES's limit for one email, `to` and `cc` together. */
+export const EMAIL_RECIPIENTS_MAX = 50
+
+export const RECIPIENT_FIELDS = ["to", "cc"] as const
+export type RecipientField = (typeof RECIPIENT_FIELDS)[number]
 
 /** A single email sent through the API, outside any campaign. */
 export type Email = {
   id: string
   senderId: string | null
-  to: string
   subject: string
   status: EmailStatus
+  /** Each recipient's status is the email's own until SES reports on them. */
+  recipients: { email: string; field: RecipientField; status: EmailStatus | EmailReport }[]
   error: string | null
   createdAt: string
 }

@@ -21,7 +21,7 @@ function providerReplying(response: Response) {
 
 const email = {
   from: "Evan <evan@example.com>",
-  to: "ann@example.com",
+  to: ["ann@example.com"],
   replyTo: "hello@example.com",
   subject: "Hello",
   html: "<p>Hi</p>",
@@ -81,6 +81,16 @@ describe("SES provider", () => {
     expect(body.Content.Simple.Body).toEqual({ Text: { Data: "Hi", Charset: "UTF-8" } })
   })
 
+  it("sends one message to several recipients and copies", async () => {
+    const { provider, requests } = providerReplying(Response.json({ MessageId: "ses-3" }))
+    await provider.send({ ...email, to: ["ann@example.com", "bob@example.com"], cc: ["ops@example.com"] })
+    const body = await requests[0].json<{ Destination: object }>()
+    expect(body.Destination).toEqual({
+      ToAddresses: ["ann@example.com", "bob@example.com"],
+      CcAddresses: ["ops@example.com"],
+    })
+  })
+
   it("a rejected message fails permanently", async () => {
     const { provider } = providerReplying(
       new Response('{"message":"Email address is not verified."}', {
@@ -109,19 +119,29 @@ describe("SES provider", () => {
 })
 
 describe("SES events", () => {
-  it("maps deliveries, permanent bounces and complaints, and ignores the rest", () => {
+  it("maps deliveries, permanent bounces and complaints, with who they're about, and ignores the rest", () => {
+    const ann = { emailAddress: "Ann@example.com" }
     const events = [
-      { eventType: "Delivery", mail: { messageId: "a" } },
-      { eventType: "Bounce", mail: { messageId: "b" }, bounce: { bounceType: "Permanent" } },
-      { eventType: "Bounce", mail: { messageId: "c" }, bounce: { bounceType: "Transient" } },
-      { eventType: "Complaint", mail: { messageId: "d" } },
+      { eventType: "Delivery", mail: { messageId: "a" }, delivery: { recipients: ["ann@example.com"] } },
+      {
+        eventType: "Bounce",
+        mail: { messageId: "b" },
+        bounce: { bounceType: "Permanent", bouncedRecipients: [ann] },
+      },
+      {
+        eventType: "Bounce",
+        mail: { messageId: "c" },
+        bounce: { bounceType: "Transient", bouncedRecipients: [ann] },
+      },
+      { eventType: "Complaint", mail: { messageId: "d" }, complaint: { complainedRecipients: [ann] } },
       { eventType: "Open", mail: { messageId: "e" } },
     ]
+    const recipients = ["ann@example.com"]
     expect(events.map((event) => parseSesEvent(JSON.stringify(event)))).toEqual([
-      { type: "delivered", providerMessageId: "a" },
-      { type: "bounced", providerMessageId: "b" },
+      { type: "delivered", providerMessageId: "a", recipients },
+      { type: "bounced", providerMessageId: "b", recipients },
       null,
-      { type: "complained", providerMessageId: "d" },
+      { type: "complained", providerMessageId: "d", recipients },
       null,
     ])
   })

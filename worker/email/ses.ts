@@ -38,7 +38,7 @@ export function sesProvider(options: SesOptions): EmailProvider {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           FromEmailAddress: email.from,
-          Destination: { ToAddresses: [email.to] },
+          Destination: { ToAddresses: email.to, CcAddresses: email.cc?.length ? email.cc : undefined },
           ReplyToAddresses: email.replyTo ? [email.replyTo] : undefined,
           ConfigurationSetName: options.configurationSet || undefined,
           Content: {
@@ -88,10 +88,15 @@ const snsMessage = z.object({
   Message: z.string().optional(),
 })
 
+const lowercase = (addresses: string[]) => addresses.map((address) => address.toLowerCase())
+const recipients = z.array(z.object({ emailAddress: z.string() })).default([])
+  .transform((listed) => lowercase(listed.map(({ emailAddress }) => emailAddress)))
 const sesEvent = z.object({
   eventType: z.string(),
   mail: z.object({ messageId: z.string().min(1) }),
-  bounce: z.object({ bounceType: z.string() }).optional(),
+  delivery: z.object({ recipients: z.array(z.string()).default([]).transform(lowercase) }).optional(),
+  bounce: z.object({ bounceType: z.string(), bouncedRecipients: recipients }).optional(),
+  complaint: z.object({ complainedRecipients: recipients }).optional(),
 })
 
 /** Reads the body SNS posts, or null when it isn't an SNS message. */
@@ -109,11 +114,13 @@ export function parseSesEvent(message: string): ProviderEvent | null {
   const providerMessageId = event.mail.messageId
   switch (event.eventType) {
     case "Delivery":
-      return { type: "delivered", providerMessageId }
+      return { type: "delivered", providerMessageId, recipients: event.delivery?.recipients ?? [] }
     case "Bounce":
-      return event.bounce?.bounceType === "Permanent" ? { type: "bounced", providerMessageId } : null
+      return event.bounce?.bounceType === "Permanent"
+        ? { type: "bounced", providerMessageId, recipients: event.bounce.bouncedRecipients }
+        : null
     case "Complaint":
-      return { type: "complained", providerMessageId }
+      return { type: "complained", providerMessageId, recipients: event.complaint?.complainedRecipients ?? [] }
     default:
       return null
   }

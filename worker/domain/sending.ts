@@ -72,7 +72,7 @@ export async function processSendMessage({ campaignId }: SendMessage) {
     })
     try {
       const { providerMessageId } = await provider.send({
-        to: contact.email,
+        to: [contact.email],
         ...tracked,
         headers: unsubscribeHeaders(url),
       })
@@ -108,7 +108,7 @@ export async function sendTestEmail(
     recipient: sampleRecipient(to.name),
     unsubscribeUrl: await unsubscribeUrl(settings),
   })
-  await senderProvider(sender).send({ to: to.email, ...email })
+  await senderProvider(sender).send({ to: [to.email], ...email })
 }
 
 /** A contact's unsubscribe link. Without one, the placeholder that test sends and screenshots show. */

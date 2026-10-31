@@ -3,7 +3,7 @@ import type { BatchItem } from "drizzle-orm/batch"
 import { z } from "zod"
 
 import type { Contact, ContactStatus } from "../../shared/model"
-import { db } from "../db/client"
+import { chunked, db, MAX_PARAMETERS } from "../db/client"
 import { contacts } from "../db/schema"
 
 export const contactInput = z.object({
@@ -22,8 +22,6 @@ export type UpsertResult = { ok: true } | { ok: false; error: "email_taken" }
 
 type ContactRow = typeof contacts.$inferSelect
 
-/** D1 binds at most 100 parameters per statement. */
-const MAX_PARAMETERS = 100
 const LOOKUP_CHUNK = MAX_PARAMETERS / 2
 const INSERT_CHUNK = Math.floor(MAX_PARAMETERS / Object.keys(getTableColumns(contacts)).length)
 
@@ -211,12 +209,6 @@ async function save({ created, changed, statusChanged, deleted }: Index) {
   }
   const [first, ...rest] = statements
   if (first) await database.batch([first, ...rest])
-}
-
-function chunked<T>(items: T[], size: number) {
-  const chunks: T[][] = []
-  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size))
-  return chunks
 }
 
 /**

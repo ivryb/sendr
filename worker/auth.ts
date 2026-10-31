@@ -158,7 +158,7 @@ async function canSignIn(email: string) {
  * is never locked out.
  */
 async function sendLoginCode(sender: SenderRow | null, email: string, otp: string) {
-  const message = { to: email, ...loginCodeEmail(otp) }
+  const message = { to: [email], ...loginCodeEmail(otp) }
   const relay = env.LOGIN_CODE_RELAY_URL
   if (sender?.verified) {
     try {

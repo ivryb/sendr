@@ -3,6 +3,7 @@ import { exports } from "cloudflare:workers"
 
 import type { ApiKeyPermission, Sender } from "../shared/model"
 import { memoryOutbox } from "../worker/email/providers"
+import { TOPIC_ARN } from "./fake-aws"
 
 export const ORIGIN = "https://sendr.test"
 export const ADMIN_EMAIL = "owner@example.com"
@@ -43,7 +44,7 @@ export function signInWithCode(email: string, otp: string) {
 /** The most recent login code, whether the instance sent it or sendr.soy did. */
 export function lastLoginCode(email: string) {
   const sent = sentEmails()
-    .filter((message) => message.to === email)
+    .filter((message) => message.to.includes(email))
     .map((message) => message.text.match(/\d{6}/)?.[0])
   const relayed = relayedCodes.filter((entry) => entry.email === email).map((entry) => entry.code)
   return [...sent, ...relayed].at(-1)
@@ -91,6 +92,42 @@ export async function webhookSecret() {
     secret: string
   }>()
   return row!.secret
+}
+
+/** Posts an SES event the way SNS delivers it. */
+export async function postSesEvent(event: unknown, secret?: string) {
+  return request(`/hooks/ses/${secret ?? (await webhookSecret())}`, {
+    json: { Type: "Notification", TopicArn: TOPIC_ARN, Message: JSON.stringify(event) },
+  })
+}
+
+/** The provider's ID for the latest email to `email`, as SES events carry it. */
+export function messageIdTo(email: string) {
+  return sentEmails().findLast((sent) => sent.to.includes(email))!.providerMessageId
+}
+
+/**
+ * An SES event about the email with `messageId`, for `recipients` (by default, everyone it
+ * went to). `details` go into the event's own part, such as a bounce's `bounceType`.
+ */
+export function sesEvent(
+  eventType: "Delivery" | "Bounce" | "Complaint",
+  messageId: string,
+  { recipients, ...details }: { recipients?: string[]; [detail: string]: unknown } = {}
+) {
+  const sent = sentEmails().find((email) => email.providerMessageId === messageId)
+  const addresses = recipients ?? [...(sent?.to ?? []), ...(sent?.cc ?? [])]
+  const listed = addresses.map((emailAddress) => ({ emailAddress }))
+  const report = {
+    Delivery: { delivery: { recipients: addresses, ...details } },
+    Bounce: { bounce: { bouncedRecipients: listed, ...details } },
+    Complaint: { complaint: { complainedRecipients: listed, ...details } },
+  }[eventType]
+  return { eventType, mail: { messageId }, ...report }
+}
+
+export function permanentBounce(messageId: string, recipients?: string[]) {
+  return sesEvent("Bounce", messageId, { bounceType: "Permanent", recipients })
 }
 
 /** Creates an API key as the signed-in admin and returns its secret. */

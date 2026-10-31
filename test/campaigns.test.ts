@@ -82,7 +82,7 @@ describe("sending a campaign", () => {
     await act(id, "approve")
     await reachStatus(id, "sent")
 
-    const recipients = sentEmails().map((email) => email.to)
+    const recipients = sentEmails().flatMap((email) => email.to)
     expect(recipients).toHaveLength(5)
     expect(new Set(recipients).size).toBe(5)
     expect((await campaign(id)).counts).toMatchObject({ total: 5, sent: 5, queued: 0 })
@@ -98,7 +98,7 @@ describe("sending a campaign", () => {
 
     await act(id, "approve")
     await reachStatus(id, "sent")
-    expect(new Set(sentEmails().map((email) => email.to)).size).toBe(250)
+    expect(new Set(sentEmails().flatMap((email) => email.to)).size).toBe(250)
   })
 
   it("a list smaller than the first batch is sent completely without approval", async () => {
@@ -115,8 +115,8 @@ describe("sending a campaign", () => {
     await act(id, "start")
     await reachStatus(id, "sent")
 
-    const ann = sentEmails().find((email) => email.to === "reader0@example.com")!
-    const other = sentEmails().find((email) => email.to === "reader1@example.com")!
+    const ann = sentEmails().find((email) => email.to.includes("reader0@example.com"))!
+    const other = sentEmails().find((email) => email.to.includes("reader1@example.com"))!
     expect(ann.subject).toBe("News for Ann")
     expect(ann.text).toContain("Hey Ann!")
     expect(other.text).toContain("Hey there!")
@@ -147,7 +147,7 @@ describe("sending a campaign", () => {
     await act(id, "approve")
     await reachStatus(id, "sent")
 
-    expect(sentEmails().map((email) => email.to)).not.toContain("reader2@example.com")
+    expect(sentEmails().flatMap((email) => email.to)).not.toContain("reader2@example.com")
     expect((await campaign(id)).counts).toMatchObject({ sent: 2, skipped: 1 })
   })
 
@@ -231,7 +231,7 @@ describe("sending a campaign", () => {
     await request(`/api/v1/campaigns/${id}/test`, { cookie: admin, json: {} })
 
     expect(sentEmails()).toMatchObject([
-      { to: "owner@example.com", subject: "[Test] News for you" },
+      { to: ["owner@example.com"], subject: "[Test] News for you" },
     ])
     expect((await campaign(id)).counts.total).toBe(0)
   })
@@ -505,7 +505,7 @@ describe("tracking clicks and opens", () => {
   }
 
   const emailTo = (to: string) => {
-    const email = sentEmails().find((email) => email.to === to)!
+    const email = sentEmails().find((email) => email.to.includes(to))!
     return { ...email, html: email.html! }
   }
   const clickLinks = (html: string) =>

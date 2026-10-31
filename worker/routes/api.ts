@@ -173,9 +173,11 @@ export const api = new Hono<ApiEnv>()
   })
 
   // Single emails
-  .post("/emails", requires("emails"), async (c) =>
-    c.json({ email: await sendSingleEmail(await parseJson(c, emailInput)) })
-  )
+  .post("/emails", requires("emails"), async (c) => {
+    // An empty key counts as none: stored, it would make every later empty-key request fail.
+    const idempotencyKey = c.req.header("Idempotency-Key") || undefined
+    return c.json({ email: await sendSingleEmail(await parseJson(c, emailInput), idempotencyKey) })
+  })
   .get("/emails/:id", requires("emails"), async (c) => c.json({ email: await getEmail(c.req.param("id")) }))
 
   // Campaigns

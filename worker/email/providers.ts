@@ -14,7 +14,7 @@ const memory: EmailProvider = {
   async send(email) {
     const providerMessageId = `memory-${crypto.randomUUID()}`
     memoryOutbox.push({ ...email, providerMessageId })
-    console.log(`[memory email] to ${email.to}: ${email.subject}`)
+    console.log(`[memory email] to ${email.to.join(", ")}: ${email.subject}`)
     return { providerMessageId }
   },
 }

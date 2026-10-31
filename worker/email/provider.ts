@@ -1,8 +1,11 @@
+import type { EmailReport } from "../../shared/model"
 import { DomainError } from "../lib/errors"
 
 export type OutgoingEmail = {
   from: string
-  to: string
+  /** Everyone on `to` and `cc` sees each other. */
+  to: string[]
+  cc?: string[]
   replyTo?: string
   subject: string
   /** Null sends a text-only email. */
@@ -12,8 +15,10 @@ export type OutgoingEmail = {
 }
 
 export type ProviderEvent = {
-  type: "delivered" | "bounced" | "complained"
+  type: EmailReport
   providerMessageId: string
+  /** Who the event is about: an email to several people gets a report for each. */
+  recipients: string[]
 }
 
 /**
