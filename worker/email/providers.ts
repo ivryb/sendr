@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers"
 import { senderAddress } from "../../shared/model"
 import type { SenderRow } from "../db/schema"
 import type { EmailProvider, OutgoingEmail } from "./provider"
-import { CONFIGURATION_SET } from "./ses-account"
+import { CONFIGURATION_SETS, type EmailStream } from "./ses-account"
 import { sesProvider } from "./ses"
 
 /** Emails accepted by the "memory" provider, for tests and local development. */
@@ -25,14 +25,14 @@ export function memoryProvider() {
 }
 
 /** The service that sends a sender's emails, from its address and with its reply-to. */
-export function senderProvider(sender: SenderRow) {
+export function senderProvider(sender: SenderRow, stream: EmailStream = "single") {
   const provider =
     memoryProvider() ??
     sesProvider({
       accessKeyId: sender.accessKeyId,
       secretAccessKey: sender.secretAccessKey,
       region: sender.region,
-      configurationSet: CONFIGURATION_SET,
+      configurationSet: CONFIGURATION_SETS[stream].name,
       maxSendsPerSecond: sender.maxSendRate,
     })
   const from = senderAddress(sender)

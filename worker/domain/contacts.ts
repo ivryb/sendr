@@ -297,8 +297,8 @@ export async function setContactStatus(
  * Stops campaigns to the contacts `where` matches after the provider reports a bounce or a spam
  * complaint. A bounce only replaces "subscribed": it belongs to the address, and a later email
  * change resubscribes the contact, so it must never stand in for an opt-out or a complaint. A
- * complaint replaces an unsubscribe and a bounce too, because it belongs to the person: their
- * single emails stop as well, and no email change or resubscribe link undoes it.
+ * complaint replaces an unsubscribe and a bounce too, because it belongs to the person: no email
+ * change or resubscribe link undoes it. Their single emails, like login codes, still go.
  */
 export async function suppressContact(where: SQL, status: "bounced" | "complained") {
   const replaces =

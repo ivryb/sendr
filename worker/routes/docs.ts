@@ -68,8 +68,9 @@ curl -X PUT ${api}/contacts/user_123 \\
 ## Single emails (emails permission)
 
 For receipts, welcome notes and other one-off emails. They go out right away, without the
-campaign footer or an unsubscribe link. If anyone on the email bounced or complained before, it
-is refused with \`422 suppressed\`, naming them, and nothing is sent.
+campaign footer or an unsubscribe link. If anyone on the email bounced before, it is refused with
+\`422 suppressed\`, naming them, and nothing is sent. Someone who reported spam still gets single
+emails, like login codes; only campaigns skip them.
 
 - \`POST /emails\` with \`{ "from": "<sender address or id>", "to", "subject", "markdown" }\`.
   \`to\` is one address or a list. Optional \`cc\` is a list, and everyone on the email sees
@@ -208,6 +209,7 @@ after a denial: https://github.com/ivryb/sendr/blob/main/docs/ses-production-acc
 
 An instance runs the code it was last deployed with, and this page describes that version. To
 update it, run \`git pull && bun install && bun run deploy\` in the checkout it deploys from. The
-deploy also applies database migrations.
+deploy also applies database migrations. Then check each sender with \`GET /senders/{id}\` (full
+permission), which brings its SES setup up to date for the new version.
 `
 }

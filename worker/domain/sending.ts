@@ -41,7 +41,7 @@ export async function processSendMessage({ campaignId }: SendMessage) {
   // Senders can't be removed while their campaign sends, so this only fails on a broken database.
   const sender = await campaignSender(campaign)
   if (!sender) throw new Error(`Campaign ${campaignId} has no sender.`)
-  const provider = senderProvider(sender)
+  const provider = senderProvider(sender, "campaign")
   const rows = await db()
     .select({ delivery: deliveries, contact: contacts })
     .from(deliveries)

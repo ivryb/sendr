@@ -15,7 +15,17 @@ export class AwsError extends Error {
   }
 }
 
-export const CONFIGURATION_SET = "sendr"
+/**
+ * Sendr's SES configuration sets. Each publishes delivery reports to this instance and has SES
+ * skip addresses whose earlier reports were these. Only campaigns skip spam complaints: people
+ * report newsletters as spam to stop them, and still need their login codes.
+ */
+export const CONFIGURATION_SETS = {
+  // Named before campaigns had their own.
+  single: { name: "sendr", suppressedReasons: ["BOUNCE"] },
+  campaign: { name: "sendr-campaigns", suppressedReasons: ["BOUNCE", "COMPLAINT"] },
+} as const
+export type EmailStream = keyof typeof CONFIGURATION_SETS
 const EVENTS_TOPIC = "sendr-events"
 const EVENT_DESTINATION = "sendr-events"
 
@@ -84,16 +94,35 @@ export function sesAccount(
   }
 
   /**
-   * Has SES itself skip addresses that bounced or complained after an email from the `sendr`
-   * configuration set. Sendr's own record of them comes through SNS, which retries a report
-   * for an hour at most (AWS's limit), so a report lost while a Workers Free daily limit is out
-   * would let the next campaign mail them. SES instead drops that email and reports a bounce,
-   * which Sendr records. Only Sendr's sends change: the account's own settings stay.
+   * Creates or updates the configuration sets, publishing their reports to `topicArn`. SES also
+   * skips reported addresses itself: Sendr's own record of them comes through SNS, which retries a
+   * report for an hour at most (AWS's limit), so a report lost while a Workers Free daily limit
+   * is out would let the next campaign mail them. SES instead drops that email and reports a
+   * bounce, which Sendr records. Only Sendr's sends change: the account's own settings stay.
    */
-  async function suppressReported() {
-    await ses(`/configuration-sets/${CONFIGURATION_SET}/suppression-options`, "PUT", {
-      SuppressedReasons: ["BOUNCE", "COMPLAINT"],
-    })
+  async function setUpConfigurationSets(topicArn: string) {
+    const destination = {
+      Enabled: true,
+      MatchingEventTypes: ["DELIVERY", "BOUNCE", "COMPLAINT"],
+      SnsDestination: { TopicArn: topicArn },
+    }
+    // Updated first, since they usually exist already: a check does this every time.
+    for (const { name, suppressedReasons } of Object.values(CONFIGURATION_SETS)) {
+      const suppression = { SuppressedReasons: suppressedReasons }
+      await ses(`/configuration-sets/${name}/suppression-options`, "PUT", suppression).catch(
+        ifMissing(() => ses("/configuration-sets", "POST", { ConfigurationSetName: name, SuppressionOptions: suppression }))
+      )
+      const destinations = `/configuration-sets/${name}/event-destinations`
+      await ses(`${destinations}/${EVENT_DESTINATION}`, "PUT", { EventDestination: destination }).catch(
+        ifMissing(() => ses(destinations, "POST", { EventDestinationName: EVENT_DESTINATION, EventDestination: destination }))
+      )
+    }
+  }
+
+  /** Creates what an update found missing; another request creating it first is fine too. */
+  const ifMissing = (create: () => Promise<unknown>) => async (error: unknown) => {
+    if (!(error instanceof AwsError && error.code === "NotFoundException")) throw error
+    await create().catch(allowExisting)
   }
 
   /** Creating something that already exists is fine: setup can run again for another sender. */
@@ -117,33 +146,14 @@ export function sesAccount(
     },
 
     subscribe,
-    suppressReported,
+    setUpConfigurationSets,
 
-    /**
-     * Publishes delivery, bounce and complaint events from the `sendr` configuration set to an
-     * SNS topic, and subscribes `endpoint` to it.
-     */
+    /** Routes delivery reports from Sendr's configuration sets through an SNS topic to `endpoint`. */
     async connectEvents(endpoint: string) {
       const topicArn = xmlValue(await sns({ Action: "CreateTopic", Name: EVENTS_TOPIC }), "TopicArn")
       if (!topicArn) throw new AwsError("NoTopicArn", "SNS didn't return the topic it created.")
       const confirmed = await subscribe(topicArn, endpoint)
-      await ses("/configuration-sets", "POST", { ConfigurationSetName: CONFIGURATION_SET }).catch(
-        allowExisting
-      )
-      await suppressReported()
-      const destination = {
-        Enabled: true,
-        MatchingEventTypes: ["DELIVERY", "BOUNCE", "COMPLAINT"],
-        SnsDestination: { TopicArn: topicArn },
-      }
-      const destinations = `/configuration-sets/${CONFIGURATION_SET}/event-destinations`
-      await ses(destinations, "POST", {
-        EventDestinationName: EVENT_DESTINATION,
-        EventDestination: destination,
-      }).catch(async (error) => {
-        allowExisting(error)
-        await ses(`${destinations}/${EVENT_DESTINATION}`, "PUT", { EventDestination: destination })
-      })
+      await setUpConfigurationSets(topicArn)
       return { topicArn, confirmed }
     },
 

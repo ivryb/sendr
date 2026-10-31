@@ -86,8 +86,9 @@ export async function checkSender(id: string) {
       ses.domain(domain),
       ses.account(),
       eventsConnected(),
-      // Senders connected before Sendr set this get it here, at the latest when a campaign starts.
-      ses.suppressReported(),
+      // Senders connected before campaigns had their own configuration set get it here: starting
+      // and approving a campaign check its sender, and so should updating Sendr.
+      row.eventsTopicArn !== null && ses.setUpConfigurationSets(row.eventsTopicArn),
     ])
     const status = {
       verified: identity.verified,

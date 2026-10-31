@@ -88,6 +88,30 @@ describe("sending a campaign", () => {
     expect((await campaign(id)).counts).toMatchObject({ total: 5, sent: 5, queued: 0 })
   })
 
+  it("approving sets up the sender's SES for campaigns, for a Sendr updated after the first batch", async () => {
+    await addContacts(3)
+    const { id } = await newCampaign({ firstBatchSize: 1 })
+    await act(id, "start")
+    await reachStatus(id, "awaiting_approval")
+
+    delete fakeAws.configurationSets["sendr-campaigns"]
+    expect((await act(id, "approve")).status).toBe(200)
+    expect(fakeAws.configurationSets).toHaveProperty("sendr-campaigns")
+  })
+
+  it("a sender whose SES check fails stops approval and says why", async () => {
+    await addContacts(3)
+    const { id } = await newCampaign({ firstBatchSize: 1 })
+    await act(id, "start")
+    await reachStatus(id, "awaiting_approval")
+
+    fakeAws.rejectKey = true
+    const response = await act(id, "approve")
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({ message: expect.stringContaining("access key") })
+    expect((await campaign(id)).status).toBe("awaiting_approval")
+  })
+
   // 250 contacts take 4-5 s while the screenshot test's browser runs alongside it.
   it("sends a list larger than one queue message without losing anyone", { timeout: 15_000 }, async () => {
     await addContacts(250)

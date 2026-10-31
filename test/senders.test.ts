@@ -62,20 +62,21 @@ describe("connecting a sender", () => {
     ])
   })
 
-  it("has SES suppress addresses that bounced or complained, for senders connected before too", async () => {
-    const suppression = () =>
-      fakeAws.requests
-        .filter(({ url }) => url.endsWith("/v2/email/configuration-sets/sendr/suppression-options"))
-        .map(({ method, body }) => ({ method, body: JSON.parse(body) }))
-    const expected = { method: "PUT", body: { SuppressedReasons: ["BOUNCE", "COMPLAINT"] } }
-
+  it("has SES skip bounced addresses, and for campaigns spam complaints, also for senders connected before", async () => {
+    const reports = { "sendr-events": expect.objectContaining({ SnsDestination: { TopicArn: TOPIC_ARN } }) }
+    const expected = {
+      sendr: { suppressedReasons: ["BOUNCE"], destinations: reports },
+      "sendr-campaigns": { suppressedReasons: ["BOUNCE", "COMPLAINT"], destinations: reports },
+    }
     const sender = await addSender(admin)
-    expect(suppression()).toContainEqual(expected)
+    expect(fakeAws.configurationSets).toEqual(expected)
 
-    // A sender connected before Sendr set this gets it on its next check, as a campaign starts.
-    fakeAws.requests = []
+    // As set up before campaigns had their own set; the next check, as a campaign starts, updates it.
+    fakeAws.configurationSets = {
+      sendr: { suppressedReasons: ["BOUNCE", "COMPLAINT"], destinations: { "sendr-events": {} } },
+    }
     expect(await check(sender.id)).toMatchObject({ ok: true })
-    expect(suppression()).toEqual([expected])
+    expect(fakeAws.configurationSets).toEqual(expected)
   })
 
   it("explains a key AWS rejects, and saves nothing", async () => {

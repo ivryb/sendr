@@ -167,6 +167,18 @@ describe("single emails", () => {
     expect(await again.json()).toMatchObject({ error: "suppressed" })
   })
 
+  // People report a newsletter as spam to stop it, and still need their login codes.
+  it("still emails someone who reported spam, though campaigns skip them", async () => {
+    await request("/api/v1/contacts/user_ann", { cookie: admin, method: "PUT", json: { email: "ann@example.com" } })
+    await sendEmail(key, { markdown: "Hi" })
+    await postSesEvent(sesEvent("Complaint", messageIdTo("ann@example.com")))
+    const contacts = await request("/api/v1/contacts?q=ann@example.com", { cookie: admin })
+    expect(await contacts.json()).toMatchObject({ contacts: [{ status: "complained" }] })
+
+    const again = await sendEmail(key, { markdown: "Your login code is 123456" })
+    expect(again.status).toBe(200)
+  })
+
   it("sends one email to several people and copies, and tracks each one's report", async () => {
     const { email } = await (
       await sendEmail(key, {

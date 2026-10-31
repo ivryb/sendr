@@ -18,7 +18,7 @@ Use the **Request production access** form in the SES console (the sender page i
 - **Where the addresses come from.** People who signed up for your product themselves. Say plainly that you never buy, rent, or scrape lists.
 - **Volume.** Emails per day and per week, and peak emails per second. Realistic numbers beat big ones.
 - **A sample email.** Its subject, a few lines of body, and the address it comes from.
-- **Bounces and complaints.** Every sender in Sendr sends through a configuration set that reports deliveries, bounces and complaints to Sendr through SNS. Addresses that bounce or complain are never emailed again. Campaigns go to a first batch and pause, so you can check bounce and complaint rates before sending to everyone.
+- **Bounces and complaints.** Every sender in Sendr sends through configuration sets that report deliveries, bounces and complaints to Sendr through SNS. Addresses that bounce are never emailed again, and people who complain get no more campaigns. Campaigns go to a first batch and pause, so you can check bounce and complaint rates before sending to everyone.
 - **Unsubscribe.** Every campaign carries a visible unsubscribe link and RFC 8058 one-click `List-Unsubscribe` headers. Opt-outs take effect immediately, and imported contacts who opted out elsewhere stay opted out.
 - **Earlier denials.** If AWS denied you before, give the case ID and what you changed.
 

@@ -101,8 +101,8 @@ export async function startCampaign(id: string, settings: InstanceSettings) {
     throw new CampaignError("not_ready", `Add ${missing.join(", ")} before sending.`)
   }
   // Checked live: an unverified address would make every email in the campaign fail.
-  const check = await checkSender(campaign.senderId)
-  if (!check.ok || !check.sender.verified) {
+  const check = await checkCampaignSender(campaign.senderId)
+  if (!check.sender.verified) {
     throw new CampaignError(
       "not_ready",
       `${check.sender.email} isn't verified yet. Finish its setup in Senders before sending.`
@@ -145,12 +145,24 @@ export async function startCampaign(id: string, settings: InstanceSettings) {
 }
 
 export async function approveCampaign(id: string) {
-  assertAction((await findCampaign(id)).status, "approve")
+  const campaign = await findCampaign(id)
+  assertAction(campaign.status, "approve")
+  if (campaign.senderId) await checkCampaignSender(campaign.senderId)
   if (!(await transition(id, statusesAllowing("approve"), "sending"))) {
     throw new CampaignError("invalid_action", "This campaign is no longer waiting for approval.")
   }
   await env.SEND_QUEUE.send({ campaignId: id })
   return getCampaign(id)
+}
+
+/**
+ * Checks the sender live, which also sets up its SES for campaigns after Sendr updated, so
+ * starting or approving one is safe even before the admin opened the sender's page.
+ */
+async function checkCampaignSender(senderId: string) {
+  const check = await checkSender(senderId)
+  if (!check.ok) throw new CampaignError("not_ready", check.error)
+  return check
 }
 
 export async function cancelCampaign(id: string) {

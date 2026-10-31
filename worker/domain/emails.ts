@@ -45,8 +45,9 @@ export const emailInput = z
 
 /**
  * Sends one email right away, outside any campaign: no footer, no unsubscribe link. Addresses
- * that bounced or complained before are refused, because mailing them again hurts the
- * sender's reputation with SES. A repeat with an earlier `idempotencyKey` gets that email
+ * that bounced before are refused, because mailing them again hurts the sender's reputation
+ * with SES. A spam complaint doesn't refuse one: people report newsletters as spam to stop
+ * them, and still need their login codes. A repeat with an earlier `idempotencyKey` gets that email
  * back and sends nothing.
  */
 export async function sendSingleEmail(input: z.infer<typeof emailInput>, idempotencyKey?: string) {
@@ -63,12 +64,12 @@ export async function sendSingleEmail(input: z.infer<typeof emailInput>, idempot
   // Each address once: one in both `to` and `cc` stays in `to`.
   const to = [...new Set(input.to)]
   const cc = [...new Set(input.cc)].filter((email) => !to.includes(email))
-  const blocked = await suppressed([...to, ...cc])
+  const blocked = await bounced([...to, ...cc])
   if (blocked.length > 0) {
     throw new DomainError(
       "suppressed",
       422,
-      `${blocked.join(", ")} bounced or reported spam before, so Sendr won't email ${blocked.length > 1 ? "them" : "it"}.`
+      `${blocked.join(", ")} bounced before, so Sendr won't email ${blocked.length > 1 ? "them" : "it"}.`
     )
   }
 
@@ -131,18 +132,17 @@ async function findEmail(where: SQL) {
   return toEmailDto(row, recipients)
 }
 
-/** The addresses among `addresses` that bounced or complained before. */
-async function suppressed(addresses: string[]) {
-  const blocked = ["bounced", "complained"] as const
+/** The addresses among `addresses` that bounced before. */
+async function bounced(addresses: string[]) {
   const [contactRows, recipientRows] = await Promise.all([
     db()
       .select({ email: contacts.email })
       .from(contacts)
-      .where(and(inArray(contacts.email, addresses), inArray(contacts.status, blocked))),
+      .where(and(inArray(contacts.email, addresses), eq(contacts.status, "bounced"))),
     db()
       .select({ email: emailRecipients.email })
       .from(emailRecipients)
-      .where(and(inArray(emailRecipients.email, addresses), inArray(emailRecipients.report, blocked))),
+      .where(and(inArray(emailRecipients.email, addresses), eq(emailRecipients.report, "bounced"))),
   ])
   return [...new Set([...contactRows, ...recipientRows].map(({ email }) => email))]
 }
